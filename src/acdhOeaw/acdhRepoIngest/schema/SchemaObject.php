@@ -33,7 +33,7 @@ use acdhOeaw\acdhRepoLib\RepoResource;
 use acdhOeaw\acdhRepoLib\exception\NotFound;
 use acdhOeaw\acdhRepoLib\exception\NotInCache;
 use acdhOeaw\acdhRepoIngest\util\Geonames;
-use zozlak\util\UUID;
+use acdhOeaw\acdhRepoIngest\util\UUID;
 
 /**
  * Basic class for representing real-world entities to be imported into 
@@ -241,7 +241,7 @@ abstract class SchemaObject {
         $pidProp       = $this->repo->getSchema()->ingest->epicPid;
         $idProp        = $this->repo->getSchema()->id;
         $relProp       = $this->repo->getSchema()->parent;
-        $uuidNmsp      = $this->repo->getSchema()->ingest->uuidNamespace;
+        $repoIdNmsp    = $this->repo->getSchema()->ingest->repoIdNamespace;
         $vidNmsp       = $this->repo->getSchema()->ingest->vidNamespace;
         $isNewVerProp  = $this->repo->getSchema()->ingest->isNewVersion;
         $isPrevVerProp = $this->repo->getSchema()->ingest->isPrevVersion;
@@ -253,7 +253,7 @@ abstract class SchemaObject {
         $this->findResource(false, $uploadBinary);
         $oldMeta = $this->res->getMetadata(true);
         $newMeta = $oldMeta->copy($skipProp);
-        $newMeta->addResource($isNewVerProp, $this->res->getId());
+        $newMeta->addResource($isNewVerProp, $this->res->getUri());
         if ($pidPass) {
             $oldMeta->deleteResource($pidProp);
         }
@@ -266,7 +266,7 @@ abstract class SchemaObject {
         }
         foreach ($oldMeta->allResources($idProp) as $id) {
             $id = (string) $id;
-            if (!in_array($id, $idSkip) && strpos($id, $uuidNmsp) !== 0) {
+            if (!in_array($id, $idSkip) && strpos($id, $repoIdNmsp) !== 0) {
                 $newMeta->addResource($idProp, $id);
                 $oldMeta->deleteResource($idProp, $id);
             }
@@ -275,16 +275,14 @@ abstract class SchemaObject {
         // there is at least one non-UUID ID required; as all are being passed to the new resource, let's create a dummy one
         $oldMeta->addResource($idProp, $vidNmsp . UUID::v4());
 
-        $oldRes  = $this->repo->getResourceByUri($this->res->getUri(true));
+        $oldRes  = $this->res;
         $oldRes->setMetadata($oldMeta);
-        $oldRes->updateMetadata();
+        $oldRes->updateMetadata(RepoResource::UPDATE_OVERWRITE);
         $oldMeta = $oldRes->getMetadata();
-
-        $oldRes = $this->res;
 
         $this->createResource($newMeta, $uploadBinary);
 
-        $oldMeta->addResource($isPrevVerProp, $this->res->getId());
+        $oldMeta->addResource($isPrevVerProp, $this->res->getUri());
         $oldRes->setMetadata($oldMeta);
         $oldRes->updateMetadata();
 
@@ -319,7 +317,7 @@ abstract class SchemaObject {
             $result = 'not found - created';
         }
 
-        echo self::$debug ? "\t" . $result . " - " . $this->res->getUri(true) . "\n" : "";
+        echo self::$debug ? "\t" . $result . " - " . $this->res->getUri() . "\n" : "";
         return $result == 'not found - created';
     }
 
@@ -352,7 +350,7 @@ abstract class SchemaObject {
      */
     protected function mergeMetadata(Resource $current, Resource $new): Resource {
         $idProp = $this->repo->getSchema()->id;
-        $meta = $current->merge($new, [$idProp]);
+        $meta   = $current->merge($new, [$idProp]);
         Geonames::standardizeMeta($meta, $idProp);
         return $meta;
     }

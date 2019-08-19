@@ -200,7 +200,7 @@ class MetadataCollection extends Graph {
             echo self::$debug ? "Importing " . $uri . " (" . ($n + 1) . "/" . count($toBeImported) . ")\n" : "";
             $this->sanitizeResource($res, $namespace);
 
-            echo self::$debug ? "\tupdating " . $fedoraRes->getUri(true) . "\n" : "";
+            echo self::$debug ? "\tupdating " . $fedoraRes->getUri() . "\n" : "";
             $meta = $fedoraRes->getMetadata();
             $meta->merge($res, [$this->repo->getSchema()->id]);
             $fedoraRes->setMetadata($meta, false);
@@ -424,7 +424,7 @@ class MetadataCollection extends Graph {
         }
 
         if ($this->resource !== null) {
-            $res->addResource($relProp, $this->resource->getId());
+            $res->addResource($relProp, $this->resource->getUri());
         }
 
         return $res;

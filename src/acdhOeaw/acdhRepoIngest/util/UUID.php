@@ -3,7 +3,7 @@
 /*
  * The MIT License
  *
- * Copyright 2019 Austrian Centre for Digital Humanities.
+ * Copyright 2016 Austrian Centre for Digital Humanities.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -26,39 +26,27 @@
 
 namespace acdhOeaw\acdhRepoIngest\util;
 
-use EasyRdf\Resource;
-
 /**
- * A simply utility class standardizing the geonames URIs
+ * Generates UUIDs 
+ * (see https://en.wikipedia.org/wiki/Universally_unique_identifier)
  *
  * @author zozlak
  */
-class Geonames {
+class UUID {
 
     /**
-     * Returns a standardized geonames URI.
-     * 
-     * If the passed URI is not a geonames URI it is returned without any 
-     * modifications.
-     * @param string $uri URI to be standardized
+     * Generates a v4 (random) UUID
      * @return string
      */
-    static public function standardize(string $uri): string {
-        $id = preg_replace('|^https?://([^.]+[.])?geonames[.]org/([0-9]+)(/.*)?$|', '\\2', $uri);
-        return $id !== $uri ? 'https://www.geonames.org/' . $id : $uri;
+    static public function v4(): string {
+        $n = array();
+        for ($i = 0; $i < 8; $i++) {
+            $n[$i] = mt_rand(0, 0xffff);
+        }
+        $n[3] = $n[3] | 0x4000;
+        $n[4] = $n[4] | 0x8000;
+        $format = '%04x%04x-%04x-%04x-%04x-%04x%04x%04x';
+        return sprintf($format, $n[0], $n[1], $n[2], $n[3], $n[4], $n[5], $n[6], $n[7]);
     }
 
-    /**
-     * Performs geonames URI standardization on a given property of a given
-     * metadata resource object.
-     * 
-     * @param Resource $res metadata to be processed
-     * @param string $property metdata property to be processed
-     */
-    static public function standardizeProperty(Resource $res, string $property) {
-        foreach ($res->allResources($property) as $id) {
-            $res->deleteResource($property, $id);
-            $res->addResource($property, Geonames::standardize((string) $id));
-        }
-    }
 }

@@ -62,11 +62,20 @@ abstract class TestBase extends \PHPUnit\Framework\TestCase {
 
     public function tearDown(): void {
         self::$repo->rollback();
+
+        // delete resources starting with the "most metadata rich" which is a simple heuristic for avoiding 
+        // unneeded resource updates when deleting one pointed by many others (such resources are typicaly 
+        // "metadata poor" therefore deleting them as the last ones should do the job)
         self::$repo->begin();
-        foreach ($this->resources as $i) {
+        $queue = [];
+        foreach ($this->resources as $n => $i) {
             /* @var $i \acdhOeaw\acdhRepoLib\RepoResource */
+            $queue[$n] = count($i->getGraph()->propertyUris());
+        }
+        arsort($queue);
+        foreach($queue as $n => $count) {
             try {
-                $i->delete(true, true);
+                $this->resources[$n]->delete(true, true);
             } catch (Deleted $e) {
                 
             } catch (NotFound $e) {
@@ -80,6 +89,6 @@ abstract class TestBase extends \PHPUnit\Framework\TestCase {
     }
 
     protected function noteResources(array $res): void {
-        $this->resources = array_merge($this->resources, $res);
+        $this->resources = array_merge($this->resources, array_values($res));
     }
 }

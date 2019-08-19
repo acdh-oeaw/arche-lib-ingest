@@ -74,6 +74,7 @@ class IndexerTest extends TestBase {
 
     private $ind;
     private $tmpDir = __DIR__ . '/tmp/';
+    private $tmpContent;
 
     public function setUp(): void {
         parent::setUp();
@@ -84,6 +85,7 @@ class IndexerTest extends TestBase {
         if (file_exists($this->tmpDir)) {
             system("rm -fR " . $this->tmpDir);
         }
+        $this->tmpContent = file_get_contents(__DIR__ . '/data/sample.xml');
     }
 
     public function tearDown(): void {
@@ -91,8 +93,12 @@ class IndexerTest extends TestBase {
         if (file_exists($this->tmpDir)) {
             system("rm -fR " . $this->tmpDir);
         }
+        file_put_contents(__DIR__ . '/data/sample.xml', $this->tmpContent);
     }
 
+    /**
+     * @group indexer
+     */
     public function testSimple(): void {
         $this->ind->setFilter('/txt|xml/', Indexer::MATCH);
         $this->ind->setFilter('/^(skiptest.txt)$/', Indexer::SKIP);
@@ -104,6 +110,9 @@ class IndexerTest extends TestBase {
         $this->assertEquals(6, count($indRes));
     }
 
+    /**
+     * @group indexer
+     */
     public function testSkipNotExist(): void {
         $this->testSimple();
 
@@ -117,6 +126,9 @@ class IndexerTest extends TestBase {
         $this->assertEquals(6, count($indRes));
     }
 
+    /**
+     * @group indexer
+     */
     public function testSkipExist(): void {
         $indRes1 = $indRes2 = [];
 
@@ -138,6 +150,9 @@ class IndexerTest extends TestBase {
         $this->assertEquals(2, count($indRes2));
     }
 
+    /**
+     * @group indexer
+     */
     public function testSkipBinaryExist(): void {
         $indRes1 = $indRes2 = [];
 
@@ -159,6 +174,9 @@ class IndexerTest extends TestBase {
         $this->assertEquals(4, count($indRes2));
     }
 
+    /**
+     * @group indexer
+     */
     public function testMetaFromFile(): void {
         $metaLookup = new MetaLookupFile(['.'], '.ttl');
         $this->ind->setDepth(0);
@@ -174,6 +192,9 @@ class IndexerTest extends TestBase {
         $this->assertEquals('sample value', (string) $meta->getLiteral('https://some.sample/property'));
     }
 
+    /**
+     * @group indexer
+     */
     public function testMetaFromGraph(): void {
         $graph      = new Graph();
         $graph->parseFile(__DIR__ . '/data/sample.xml.ttl');
@@ -191,6 +212,9 @@ class IndexerTest extends TestBase {
         $this->assertEquals('sample value', (string) $meta->getLiteral('https://some.sample/property'));
     }
 
+    /**
+     * @group indexer
+     */
     public function testSkipWithoutMetaInFile(): void {
         $metaLookup = new MetaLookupFile(['.'], '.ttl');
         self::$repo->begin();
@@ -205,6 +229,9 @@ class IndexerTest extends TestBase {
         $this->assertEquals('sample value', (string) $meta->getLiteral('https://some.sample/property'));
     }
 
+    /**
+     * @group indexer
+     */
     public function testWithoutMetaInGraph(): void {
         $metaLookup = new MetaLookupFile(['.'], '.ttl');
         self::$repo->begin();
@@ -219,6 +246,9 @@ class IndexerTest extends TestBase {
         $this->assertEquals('sample value', (string) $meta->getLiteral('https://some.sample/property'));
     }
 
+    /**
+     * @group indexer
+     */
     public function testMergeOnExtMeta(): void {
         $idProp    = self::$repo->getSchema()->id;
         $titleProp = self::$repo->getSchema()->label;
@@ -248,30 +278,33 @@ class IndexerTest extends TestBase {
         $this->assertEquals($res1->getUri(), array_pop($indRes)->getUri());
     }
 
+    /**
+     * @group indexer
+     */
     public function testMergeAndDeleted(): void {
         $idProp    = self::$repo->getSchema()->id;
         $titleProp = self::$repo->getSchema()->label;
-        $commonId = 'https://my.id.nmsp/' . rand();
-        $fileName = rand();
-        
+        $commonId  = 'https://my.id.nmsp/' . rand();
+        $fileName  = rand();
+
         //first instance of a resource created in a separate transaction
         self::$repo->begin();
-        $meta     = (new Graph())->resource('.');
+        $meta = (new Graph())->resource('.');
         $meta->addResource($idProp, $commonId);
         $meta->addLiteral($titleProp, 'sample title');
-        $res2     = self::$repo->createResource($meta);
+        $res2 = self::$repo->createResource($meta);
         $this->noteResources([$res2]);
         self::$repo->commit();
-        
+
         // main transaction
         self::$repo->begin();
         $res2->delete(true);
-        $res3     = self::$repo->createResource($meta);
+        $res3 = self::$repo->createResource($meta);
         $this->noteResources([$res3]);
         $res3->delete(true);
-        $res4     = self::$repo->createResource($meta);
+        $res4 = self::$repo->createResource($meta);
         $this->noteResources([$res4]);
-        
+
         // preparare files on a disk
         $meta->delete($titleProp);
         mkdir($this->tmpDir);
@@ -281,77 +314,129 @@ class IndexerTest extends TestBase {
         $this->ind->setPaths(['tmp']);
         $this->ind->setFilter('/^' . $fileName . '$/');
         $this->ind->setMetaLookup(new MetaLookupFile(['.'], '.ttl'));
-        $indRes    = $this->ind->index();
+        $indRes = $this->ind->index();
         $this->noteResources($indRes);
         self::$repo->commit();
-        
+
         // indexed resource should match manually created one
         $this->assertEquals(1, count($indRes));
         $this->assertEquals($res4->getUri(), array_pop($indRes)->getUri());
     }
 
-    /*
-      public function testAutocommit(): void {
-      $indRes = array();
-      self::$repo->begin();
-      $this->ind->setFilter('/txt|xml/');
-      $this->ind->setAutoCommit(2);
-      $indRes = $this->ind->index();
-      assert(count($indRes) === 6, new Exception("resources count doesn't match " . count($indRes)));
-      self::$repo->commit();
-      }
-
-      public function testNewVersionCreation(): void {
-      $indRes1     = $indRes2     = $indRes3     = [];
-      $origContent = file_get_contents(__DIR__ . '/data/sample.xml');
-      $this->ind->setFilter('/^sample.xml$/', Indexer::MATCH);
-      $this->ind->setFlatStructure(true);
-
-      self::$repo->begin();
-      $indRes1 = $this->ind->index();
-      $initRes = $indRes1[array_keys($indRes1)[0]];
-      $meta    = $initRes->getMetadata();
-      $meta->addResource(RC::get('epicPidProp'), 'https://sample.pid');
-      $initRes->setMetadata($meta);
-      $initRes->updateMetadata();
-      self::$repo->commit();
-
-      file_put_contents(__DIR__ . '/data/sample.xml', random_int(0, 123456));
-
-      self::$repo->begin();
-      $this->ind->setVersioning(Indexer::VERSIONING_DIGEST, Indexer::PID_PASS);
-      $indRes2 = $this->ind->index();
-      self::$repo->commit();
-
-      assert(count($indRes2) === 1, new Exception('Wrong indexed resources count'));
-      $newRes      = $indRes2[array_keys($indRes2)[0]];
-      $meta        = $newRes->getMetadata();
-      assert((string) $meta->getResource(RC::get('epicPidProp')) === 'https://sample.pid', 'PID missing in the new resource');
-      assert(in_array('https://sample.pid', $newRes->getIds()), 'PID missing among new resource IDs');
-      $prevResUuid = (string) $meta->getResource(RC::get('fedoraIsNewVersionProp'));
-      assert(!empty($prevResUuid), new Exception('No link to the previous version'));
-      $prevRes     = self::$repo->getResourceById($prevResUuid);
-      $prevMeta    = $prevRes->getMetadata(true);
-      assert($prevMeta->getResource(RC::get('epicPidProp')) === null, 'PID present in the old resource');
-      $newResUuid  = (string) $prevMeta->getResource(RC::get('fedoraIsPrevVersionProp'));
-      assert(!empty($newResUuid), new Exception('No link to the newer version'));
-      $newRes2     = self::$repo->getResourceById($newResUuid);
-      assert($newRes2->getUri(true) === $newRes->getUri(true), new Exception('New version link points to a wrong resource'));
-
-      file_put_contents(__DIR__ . '/data/sample.xml', random_int(0, 123456));
-
-      self::$repo->begin();
-      $this->ind->setVersioning(Indexer::VERSIONING_DIGEST, Indexer::PID_KEEP);
-      $indRes3 = $this->ind->index();
-      self::$repo->commit();
-
-      assert(count($indRes3) === 1, new Exception('Wrong indexed resources count'));
-      $newestRes  = $indRes3[array_keys($indRes3)[0]];
-      $newestMeta = $newestRes->getMetadata();
-      assert($newestMeta->getResource(RC::get('epicPidProp')) === null, 'PID present in the new resource');
-      $newMeta    = $newRes->getMetadata(true);
-      assert((string) $newMeta->getResource(RC::get('epicPidProp')) === 'https://sample.pid', 'PID not present in the old resource');
-      assert(in_array('https://sample.pid', $newRes->getIds()), 'PID missing among old resource IDs');
-      }
+    /**
+     * @group indexer
      */
+    public function testAutocommit(): void {
+        self::$repo->begin();
+        $this->ind->setFilter('/txt|xml/');
+        $this->ind->setAutoCommit(2);
+        $indRes = $this->ind->index();
+        $this->noteResources($indRes);
+        self::$repo->commit();
+        $this->assertEquals(7, count($indRes));
+    }
+    
+    /**
+     * @group indexer
+     */
+    public function testNewVersionCreation(): void {
+        $pidProp = self::$repo->getSchema()->ingest->epicPid;
+        $pid = 'https://sample.pid';
+        
+        $indRes1     = $indRes2     = $indRes3     = [];
+        $this->ind->setFilter('/^sample.xml$/', Indexer::MATCH);
+        $this->ind->setFlatStructure(true);
+
+        self::$repo->begin();
+        $indRes1 = $this->ind->index();
+        $this->noteResources($indRes1);
+        $initRes = array_pop($indRes1);
+        $meta    = $initRes->getMetadata();
+        $meta->addResource($pidProp, $pid);
+        $initRes->setMetadata($meta);
+        $initRes->updateMetadata();
+        self::$repo->commit();
+
+        file_put_contents(__DIR__ . '/data/sample.xml', random_int(0, 123456));
+
+        self::$repo->begin();
+        $this->ind->setVersioning(Indexer::VERSIONING_DIGEST, Indexer::PID_PASS);
+        $indRes2 = $this->ind->index();
+        $this->noteResources($indRes2);
+        self::$repo->commit();
+
+        $this->assertEquals(1, count($indRes2));
+        $newRes      = array_pop($indRes2);
+        $meta        = $newRes->getMetadata();
+        $this->assertEquals($pid, (string) $meta->getResource($pidProp)); // PID copied to the new resource
+        $this->assertTrue(in_array($pid, $newRes->getIds())); // depends on PID being copied to id (which is NOT the default repository setup cause the repository doesn't know the PID concept)
+        $prevResId = (string) $meta->getResource(self::$repo->getSchema()->ingest->isNewVersion);
+        $this->assertTrue(!empty($prevResId));
+        $prevRes     = self::$repo->getResourceById($prevResId);
+        $prevMeta    = $prevRes->getMetadata(true);
+        $this->assertNull($prevMeta->getResource($pidProp)); // PID not present in the old resource
+        $newResId  = (string) $prevMeta->getResource(self::$repo->getSchema()->ingest->isPrevVersion);
+        $this->assertTrue(!empty($newResId));
+        $newRes2     = self::$repo->getResourceById($newResId);
+        $this->assertEquals($newRes2->getUri(), $newRes->getUri());
+
+        file_put_contents(__DIR__ . '/data/sample.xml', random_int(0, 123456));
+
+        self::$repo->begin();
+        $this->ind->setVersioning(Indexer::VERSIONING_DIGEST, Indexer::PID_KEEP);
+        $indRes3 = $this->ind->index();
+        $this->noteResources($indRes3);
+        self::$repo->commit();
+
+        $this->assertEquals(1, count($indRes3));
+        $newestRes  = array_pop($indRes3);
+        $newestMeta = $newestRes->getMetadata();
+        $this->assertNull($newestMeta->getResource($pidProp));
+        $newMeta    = $newRes->getMetadata(true);
+        $this->assertEquals($pid, (string) $newMeta->getResource($pidProp));
+        $this->assertTrue(in_array($pid, $newRes->getIds()));
+    }
+
+    /**
+     * 
+     * @large
+     * @group largeIndexer
+     */
+    public function testRealWorldData(): void {
+        $this->ind->setFilter('/.*/');
+        $this->ind->setDepth(100);
+        self::$repo->begin();
+        $indRes = $this->ind->index();
+        $this->noteResources($indRes);
+        self::$repo->commit();
+        $this->assertEquals(77, count($indRes));
+    }    
+    
+    /**
+     * 
+     * @large
+     */
+    public function testBigFile(): void {
+        $bufLen = 1024 * 1024;
+        $buf = str_repeat('a', $bufLen); // 1 MB
+        $count = 1024; // 1 GB
+        
+        mkdir($this->tmpDir);
+        $f = fopen($this->tmpDir . '/test', 'wb');
+        for ($i = 0; $i < $count; $i++) {
+            fwrite($f, $buf);
+        }
+        fclose($f);
+        unset($buf);
+        
+        $this->ind->setPaths(['tmp']);
+        $this->ind->setUploadSizeLimit($count * $bufLen);
+        self::$repo->begin();
+        $indRes = $this->ind->index();
+        $this->noteResources($indRes);
+        self::$repo->commit();
+        
+        $this->assertEquals(1, count($indRes));
+        $this->assertEquals($count * $bufLen, (int) array_pop($indRes)->getMetadata()->getLiteral(self::$repo->getSchema()->binarySize)->getValue());
+    }
 }

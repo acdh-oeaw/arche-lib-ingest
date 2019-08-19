@@ -95,7 +95,6 @@ class MetaLookupGraph implements MetaLookupInterface {
             echo self::$debug ? "  metadata found\n" : '';
             return array_pop($candidates);
         } else if (count($candidates) > 1) {
-print_r(array_keys($candidates));
             throw new MetaLookupException('more then one metadata resource');
         }
 

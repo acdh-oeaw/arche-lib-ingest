@@ -32,78 +32,94 @@ namespace acdhOeaw\acdhRepoIngest;
  * @author zozlak
  */
 class MetadataCollectionTest extends TestBase {
-/*
+
     static public function setUpBeforeClass(): void {
         parent::setUpBeforeClass();
 
         //MetadataCollection::$debug = true;
     }
 
+    /**
+     * @group metadataCollection
+     */
     public function testSimple(): void {
-        $graph           = new MetadataCollection(self::$repo, __DIR__ . '/data/graph-small.ttl');
+        $graph  = new MetadataCollection(self::$repo, __DIR__ . '/data/graph-small.ttl');
         self::$repo->begin();
-        $this->resources = $graph->import('https://id.acdh.oeaw.ac.at/', MetadataCollection::SKIP);
+        $indRes = $graph->import('https://id.acdh.oeaw.ac.at/', MetadataCollection::SKIP);
+        $this->noteResources($indRes);
         self::$repo->commit();
 
-        $this->assertEquals(4, count($this->resources));
+        $this->assertEquals(4, count($indRes));
     }
 
+    /**
+     * @group metadataCollection
+     */
     public function testSimpleDouble(): void {
-        $graph           = new MetadataCollection(self::$repo, __DIR__ . '/data/graph-small.ttl');
+        $graph   = new MetadataCollection(self::$repo, __DIR__ . '/data/graph-small.ttl');
         self::$repo->begin();
-        $resources1      = $graph->import('https://id.acdh.oeaw.ac.at/', MetadataCollection::SKIP);
-        $this->resources = $resources1;
+        $indRes1 = $graph->import('https://id.acdh.oeaw.ac.at/', MetadataCollection::SKIP);
+        $this->noteResources($indRes1);
         self::$repo->commit();
 
-        $this->assertEquals(4, count($resources1));
+        $this->assertEquals(4, count($indRes1));
 
-        $graph           = new MetadataCollection(self::$repo, __DIR__ . '/data/graph-small.ttl');
+        $graph   = new MetadataCollection(self::$repo, __DIR__ . '/data/graph-small.ttl');
         self::$repo->begin();
-        $resources2      = $graph->import('https://id.acdh.oeaw.ac.at/', MetadataCollection::SKIP);
-        $this->resources = array_merge($this->resources, $resources2);
+        $indRes2 = $graph->import('https://id.acdh.oeaw.ac.at/', MetadataCollection::SKIP);
+        $this->noteResources($indRes2);
         self::$repo->commit();
 
-        $this->assertEquals(4, count($resources2));
+        $this->assertEquals(4, count($indRes2));
         $r1u = $r2u = [];
-        foreach ($resources1 as $i) {
+        foreach ($indRes1 as $i) {
             $r1u[] = $i->getUri();
         }
-        foreach ($resources2 as $i) {
+        foreach ($indRes2 as $i) {
             $r2u[] = $i->getUri();
         }
         $this->assertEquals(count($r1u), count($r2u));
         $this->assertEquals([], array_diff($r2u, $r1u));
     }
 
+    /**
+     * @group metadataCollection
+     */
     public function testLarge(): void {
-        $graph           = new MetadataCollection(self::$repo, __DIR__ . '/data/graph-large.ttl');
+        $graph  = new MetadataCollection(self::$repo, __DIR__ . '/data/graph-large.ttl');
         self::$repo->begin();
-        $this->resources = $graph->import('https://id.acdh.oeaw.ac.at/', MetadataCollection::SKIP);
+        $indRes = $graph->import('https://id.acdh.oeaw.ac.at/', MetadataCollection::SKIP);
+        $this->noteResources($indRes);
         self::$repo->commit();
 
-        $this->assertEquals(19, count($this->resources));
+        $this->assertEquals(19, count($indRes));
     }
 
+    /**
+     * @group metadataCollection
+     */
     public function testCycle(): void {
-        $graph           = new MetadataCollection(self::$repo, __DIR__ . '/data/graph-cycle.ttl');
+        $graph  = new MetadataCollection(self::$repo, __DIR__ . '/data/graph-cycle.ttl');
         self::$repo->begin();
-        $this->resources = $graph->import('http://some.id', MetadataCollection::SKIP);
+        $indRes = $graph->import('http://some.id', MetadataCollection::SKIP);
+        $this->noteResources($indRes);
         self::$repo->commit();
 
-        $this->assertEquals(2, count($this->resources));
+        $this->assertEquals(2, count($indRes));
     }
-*/
+
     /**
      * @large
+     * @group largeMetadataCollection
      */
-    /*
-      public function testBig(): void {
-      $graph           = new MetadataCollection(self::$repo, __DIR__ . '/data/schnitzler-diaries.rdf');
-      self::$repo->begin();
-      $this->resources = $graph->import('https://id.acdh.oeaw.ac.at/', MetadataCollection::SKIP);
-      self::$repo->commit();
+    public function testBig(): void {
+        $graph           = new MetadataCollection(self::$repo, __DIR__ . '/data/schnitzler-diaries.rdf');
+        self::$repo->begin();
+        $indRes = $graph->import('https://id.acdh.oeaw.ac.at/', MetadataCollection::SKIP);
+        $this->noteResources($indRes);
+        self::$repo->commit();
 
-      $this->assertEquals(75, count($this->resources));
-      }
-     */
+        $this->assertEquals(75, count($indRes));
+    }
+
 }

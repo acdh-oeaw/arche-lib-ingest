@@ -625,9 +625,9 @@ class Indexer {
                         $versioning = $locModDate > $modDate;
                         break;
                     case self::VERSIONING_DIGEST:
-                        $hash       = (string) $meta->getResource($this->repo->getSchema()->hash);
-                        $locHash    = sha1_file($iter->getPathname());
-                        $versioning = explode(':', $hash)[2] !== $locHash;
+                        $hash       = explode(':', (string) $meta->getLiteral($this->repo->getSchema()->hash));
+                        $locHash = $this->getFileHash($iter->getPathname(), $hash[0]);
+                        $versioning = $hash[1] !== $locHash;
                         break;
                     case self::VERSIONING_ALWAYS:
                         $versioning = true;
@@ -650,7 +650,7 @@ class Indexer {
             $oldRes = $file->createNewVersion($upload, $this->pidPass === self::PID_PASS);
             $newRes = $file->getResource(false);
             echo self::$debug ? "\tnewVersion" . ($upload ? " + upload " : "") . "\n" : '';
-            echo self::$debug ? "\t" . $oldRes->getUri(true) . " ->\n" : '';
+            echo self::$debug ? "\t" . $oldRes->getUri() . " ->\n" : '';
 
             return $newRes;
         }
@@ -670,4 +670,9 @@ class Indexer {
         $this->collectionClass = $c->indexerDefaultCollectionClass;
     }
 
+    private function getFileHash(string $path, string $hashName): string {
+        $hash = hash_init($hashName);
+        hash_update_file($hash, $path);
+        return hash_final($hash, false);
+    }
 }
