@@ -3,7 +3,7 @@
 /*
  * The MIT License
  *
- * Copyright 2019 zozlak.
+ * Copyright 2019 Austrian Centre for Digital Humanities.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -45,7 +45,7 @@ abstract class TestBase extends \PHPUnit\Framework\TestCase {
     static protected $config;
 
     static public function setUpBeforeClass(): void {
-        $cfgFile      = __DIR__ . '/../../rdbms/config.yaml';
+        $cfgFile      = __DIR__ . '/config.yaml';
         self::$config = json_decode(json_encode(yaml_parse_file($cfgFile)));
         self::$repo   = Repo::factory($cfgFile);
     }

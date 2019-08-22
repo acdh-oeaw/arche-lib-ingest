@@ -1,0 +1,55 @@
+rest:
+    urlBase: https://test.localhost
+    pathBase: /
+    verifyCert: false
+    headers:
+        metadataReadMode: X-METADATA-READ-MODE
+        metadataParentProperty: X-PARENT-PROPERTY
+        metadataWriteMode: X-METADATA-WRITE-MODE
+        transactionId: X-TRANSACTION-ID
+schema:
+    id: https://vocabs.acdh.oeaw.ac.at/schema#hasIdentifier
+    parent: https://vocabs.acdh.oeaw.ac.at/schema#isPartOf
+    label: https://vocabs.acdh.oeaw.ac.at/schema#hasTitle
+    delete: delete://delete
+    searchMatch: search://match
+    searchFts: search://fts
+    binarySize: https://vocabs.acdh.oeaw.ac.at/schema#hasBinarySize
+    fileName: http://www.ebu.ch/metadata/ontologies/ebucore/ebucore#filename
+    mime: https://vocabs.acdh.oeaw.ac.at/schema#hasFormat
+    hash: http://www.loc.gov/premis/rdf/v1#hasMessageDigest
+    modificationDate: http://fedora.info/definitions/v4/repository#lastModified
+    modificationUser: http://fedora.info/definitions/v4/repository#lastModifiedBy
+    creationDate: http://fedora.info/definitions/v4/repository#created
+    creationUser: http://fedora.info/definitions/v4/repository#createdBy
+    dissService:
+        class: https://vocabs.acdh.oeaw.ac.at/schema#DisseminationService
+        location: https://vocabs.acdh.oeaw.ac.at/schema#serviceLocation
+        returnFormat: https://vocabs.acdh.oeaw.ac.at/schema#hasReturnType
+        matchProperty: https://vocabs.acdh.oeaw.ac.at/schema#matchesProp
+        matchValue: https://vocabs.acdh.oeaw.ac.at/schema#matchesValue
+        matchRequired: https://vocabs.acdh.oeaw.ac.at/schema#isRequired
+        revProxy: https://vocabs.acdh.oeaw.ac.at/schema#serviceRevProxy
+        parameterClass: https://vocabs.acdh.oeaw.ac.at/schema#DisseminationServiceParameter
+        parameterDefaultValue: https://vocabs.acdh.oeaw.ac.at/schema#hasDefaultValue
+        parameterRdfProperty: https://vocabs.acdh.oeaw.ac.at/schema#usesRdfProperty
+        hasService: https://vocabs.acdh.oeaw.ac.at/schema#hasDissService
+    ingest:
+        epicPid: https://vocabs.acdh.oeaw.ac.at/schema#hasPid
+        idNamespace: https://id.acdh.oeaw.ac.at/
+        location: https://vocabs.acdh.oeaw.ac.at/schema#hasLocationPath
+        repoIdNamespace: http://127.0.0.1/rest/
+        vidNamespace: https://id.acdh.oeaw.ac.at/vid/
+        containerDir: /home/zozlak/roboty/ACDH/repo/rdbms-lib-ingest/tests
+        containerToUriPrefix: acdhContainer://
+        isNewVersion: https://vocabs.acdh.oeaw.ac.at/schema#isNewVersionOf
+        isPrevVersion: https://vocabs.acdh.oeaw.ac.at/schema#isPreviousVersionOf
+        indexerDefaultBinaryClass: ''
+        indexerDefaultCollectionClass: ''
+# client authorization config
+auth:
+    httpHeader:
+        Eppn: admin
+    httpBasic:
+        user: ''
+        passsword: ''
