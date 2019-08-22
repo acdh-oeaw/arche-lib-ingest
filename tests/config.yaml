@@ -38,7 +38,6 @@ schema:
         epicPid: https://vocabs.acdh.oeaw.ac.at/schema#hasPid
         idNamespace: https://id.acdh.oeaw.ac.at/
         location: https://vocabs.acdh.oeaw.ac.at/schema#hasLocationPath
-        repoIdNamespace: http://127.0.0.1/rest/
         vidNamespace: https://id.acdh.oeaw.ac.at/vid/
         containerDir: /home/zozlak/roboty/ACDH/repo/rdbms-lib-ingest/tests
         containerToUriPrefix: acdhContainer://

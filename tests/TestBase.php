@@ -26,6 +26,7 @@
 
 namespace acdhOeaw\acdhRepoIngest;
 
+use DateTime;
 use acdhOeaw\acdhRepoLib\Repo;
 use acdhOeaw\acdhRepoLib\exception\Deleted;
 use acdhOeaw\acdhRepoLib\exception\NotFound;
@@ -43,6 +44,7 @@ abstract class TestBase extends \PHPUnit\Framework\TestCase {
      */
     static protected $repo;
     static protected $config;
+    static private $n = 1;
 
     static public function setUpBeforeClass(): void {
         $cfgFile      = __DIR__ . '/config.yaml';
@@ -58,9 +60,11 @@ abstract class TestBase extends \PHPUnit\Framework\TestCase {
 
     public function setUp(): void {
         $this->resources = [];
+        $this->startTimer();
     }
 
     public function tearDown(): void {
+        $this->noteTime('test ' . self::$n++);
         self::$repo->rollback();
 
         // delete resources starting with the "most metadata rich" which is a simple heuristic for avoiding 
@@ -73,7 +77,7 @@ abstract class TestBase extends \PHPUnit\Framework\TestCase {
             $queue[$n] = count($i->getGraph()->propertyUris());
         }
         arsort($queue);
-        foreach($queue as $n => $count) {
+        foreach ($queue as $n => $count) {
             try {
                 $this->resources[$n]->delete(true, true);
             } catch (Deleted $e) {
@@ -91,4 +95,14 @@ abstract class TestBase extends \PHPUnit\Framework\TestCase {
     protected function noteResources(array $res): void {
         $this->resources = array_merge($this->resources, array_values($res));
     }
+
+    protected function startTimer(): void {
+        $this->time = microtime(true);
+    }
+
+    protected function noteTime(string $msg = ''): void {
+        $t = microtime(true) - $this->time;
+        file_put_contents(__DIR__ . '/time.log', (new DateTime())->format('Y-m-d H:i:s.u') . "\t$t\t$msg\n", \FILE_APPEND);
+    }
+
 }

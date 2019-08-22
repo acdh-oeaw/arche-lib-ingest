@@ -241,7 +241,7 @@ abstract class SchemaObject {
         $pidProp       = $this->repo->getSchema()->ingest->epicPid;
         $idProp        = $this->repo->getSchema()->id;
         $relProp       = $this->repo->getSchema()->parent;
-        $repoIdNmsp    = $this->repo->getSchema()->ingest->repoIdNamespace;
+        $repoIdNmsp    = $this->repo->getBaseUrl();
         $vidNmsp       = $this->repo->getSchema()->ingest->vidNamespace;
         $isNewVerProp  = $this->repo->getSchema()->ingest->isNewVersion;
         $isPrevVerProp = $this->repo->getSchema()->ingest->isPrevVersion;
