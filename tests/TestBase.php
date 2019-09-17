@@ -73,8 +73,14 @@ abstract class TestBase extends \PHPUnit\Framework\TestCase {
         self::$repo->begin();
         $queue = [];
         foreach ($this->resources as $n => $i) {
-            /* @var $i \acdhOeaw\acdhRepoLib\RepoResource */
-            $queue[$n] = count($i->getGraph()->propertyUris());
+            try {
+                /* @var $i \acdhOeaw\acdhRepoLib\RepoResource */
+                $queue[$n] = count($i->getGraph()->propertyUris());
+            } catch (Deleted $e) {
+                
+            } catch (NotFound $e) {
+                
+            }
         }
         arsort($queue);
         foreach ($queue as $n => $count) {
