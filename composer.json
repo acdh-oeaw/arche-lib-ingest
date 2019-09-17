@@ -1,6 +1,9 @@
 {
     "name": "acdh-oeaw/acdh-repo-ingest",
     "description": "A library for ingesting data into the ACDH digital objects repository",
+    "keywords": [],
+    "homepage": "https://github.com/zozlak/acdh-repo-ingest",
+    "license": "MIT",
     "authors": [
         {
             "name": "Mateusz Żółtak",
