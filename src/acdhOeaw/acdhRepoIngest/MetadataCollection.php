@@ -178,7 +178,7 @@ class MetadataCollection extends Graph {
      * @param int $singleOutNmsp should repository resources be created
      *   representing URIs outside $namespace (MetadataCollection::SKIP or
      *   MetadataCollection::CREATE)
-     * @return array
+     * @return \acdhOeaw\acdhRepoLib\RepoResource[]
      * @throws InvalidArgumentException
      */
     public function import(string $namespace, int $singleOutNmsp): array {
@@ -194,17 +194,17 @@ class MetadataCollection extends Graph {
         $repoResources = $this->assureIds($toBeImported);
 
         foreach ($toBeImported as $n => $res) {
-            $uri       = $res->getUri();
-            $fedoraRes = $repoResources[$uri];
+            $uri     = $res->getUri();
+            $repoRes = $repoResources[$uri];
 
             echo self::$debug ? "Importing " . $uri . " (" . ($n + 1) . "/" . count($toBeImported) . ")\n" : "";
             $this->sanitizeResource($res, $namespace);
 
-            echo self::$debug ? "\tupdating " . $fedoraRes->getUri() . "\n" : "";
-            $meta = $fedoraRes->getMetadata();
+            echo self::$debug ? "\tupdating " . $repoRes->getUri() . "\n" : "";
+            $meta = $repoRes->getMetadata();
             $meta->merge($res, [$this->repo->getSchema()->id]);
-            $fedoraRes->setMetadata($meta, false);
-            $fedoraRes->updateMetadata();
+            $repoRes->setMetadata($meta);
+            $repoRes->updateMetadata();
             $this->handleAutoCommit();
         }
         return array_values($repoResources);
@@ -217,7 +217,7 @@ class MetadataCollection extends Graph {
      * @param int $singleOutNmsp should repository resources be created
      *   representing URIs outside $namespace (MetadataCollection::SKIP or
      *   MetadataCollection::CREATE)
-     * @return array
+     * @return \acdhOeaw\acdhRepoLib\RepoResource[]
      */
     private function filterResources(string $namespace, int $singleOutNmsp): array {
         $idProp = $this->repo->getSchema()->id;
@@ -257,7 +257,7 @@ class MetadataCollection extends Graph {
      * Assures all resource to be imported have an id so references to
      * them can be set correctly.
      * @param array $resources resource to be checked
-     * @return array
+     * @return \acdhOeaw\acdhRepoLib\RepoResource[]
      */
     private function assureIds(array $resources): array {
         echo self::$debug ? "Assuring all resources to be imported have Ids...\n" : '';
@@ -353,7 +353,7 @@ class MetadataCollection extends Graph {
      * 
      * @param Resource $res
      * @param string $namespace
-     * @return boolean
+     * @return bool
      */
     private function containsWrongRefs(Resource $res, string $namespace): bool {
         foreach ($res->propertyUris() as $prop) {
@@ -376,7 +376,7 @@ class MetadataCollection extends Graph {
     /**
      * Promotes subjects being fully qualified URLs to ids.
      */
-    private function promoteUrisToIds() {
+    private function promoteUrisToIds(): void {
         echo self::$debug ? "Promoting URIs to ids...\n" : '';
         foreach ($this->resources() as $i) {
             if (!$i->isBNode()) {
@@ -392,7 +392,7 @@ class MetadataCollection extends Graph {
      * 
      * @param Resource $res
      * @param string $namespace
-     * @return Resource
+     * @return \EasyRdf\Resource
      * @throws InvalidArgumentException
      */
     private function sanitizeResource(Resource $res, string $namespace): Resource {
@@ -433,7 +433,7 @@ class MetadataCollection extends Graph {
     /**
      * Removes literal ids from the graph.
      */
-    private function removeLiteralIds() {
+    private function removeLiteralIds(): void {
         echo self::$debug ? "Removing literal ids...\n" : "";
         $idProp = $this->repo->getSchema()->id;
 
