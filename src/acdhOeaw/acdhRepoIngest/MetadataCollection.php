@@ -289,7 +289,7 @@ class MetadataCollection extends Graph {
                         $title = substr($id, strlen($idNmsp));
                     }
                 }
-                $meta->addLiteral($titleProp, $title);
+                $meta->addLiteral($titleProp, $title, 'en');
                 $repoRes = $this->repo->createResource($meta);
                 $found   = 'new';
                 $this->handleAutoCommit();
@@ -416,7 +416,7 @@ class MetadataCollection extends Graph {
         }
 
         if (count($res->allLiterals($titleProp)) == 0) {
-            $res->addLiteral($titleProp, $res->getResource($idProp));
+            $res->addLiteral($titleProp, $res->getResource($idProp), 'en');
         }
 
         if ($res->isA('http://xmlns.com/foaf/0.1/Person') || $res->isA('http://xmlns.com/foaf/0.1/Agent')) {
