@@ -494,7 +494,7 @@ class Indexer {
         }
         if (!$skip && !$skip2) {
             try {
-                $res                                 = $this->performUpdate($i, $file, $parent, $upload);
+                $res                                 = $this->performUpdate($i, $file, $upload);
                 $this->indexedRes[$i->getPathname()] = $res;
                 $this->handleAutoCommit();
             } catch (MetaLookupException $e) {
@@ -611,7 +611,7 @@ class Indexer {
      * @return \acdhOeaw\acdhRepoLib\RepoResource
      */
     public function performUpdate(DirectoryIterator $iter, File $file,
-                                  string $parent, bool $upload): RepoResource {
+                                  bool $upload): RepoResource {
         // check versioning conditions
         $versioning = $this->versioningMode !== self::VERSIONING_NONE && !$iter->isDir();
         if ($versioning) {
@@ -626,7 +626,7 @@ class Indexer {
                         break;
                     case self::VERSIONING_DIGEST:
                         $hash       = explode(':', (string) $meta->getLiteral($this->repo->getSchema()->hash));
-                        $locHash = $this->getFileHash($iter->getPathname(), $hash[0]);
+                        $locHash    = $this->getFileHash($iter->getPathname(), $hash[0]);
                         $versioning = $hash[1] !== $locHash;
                         break;
                     case self::VERSIONING_ALWAYS:
@@ -675,4 +675,5 @@ class Indexer {
         hash_update_file($hash, $path);
         return hash_final($hash, false);
     }
+
 }
