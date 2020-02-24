@@ -32,7 +32,7 @@ use EasyRdf\Resource;
 use acdhOeaw\acdhRepoLib\Repo;
 use acdhOeaw\acdhRepoLib\RepoResource;
 use acdhOeaw\acdhRepoLib\exception\NotFound;
-use acdhOeaw\acdhRepoIngest\util\Geonames;
+use acdhOeaw\acdhRepoIngest\util\UriNorm;
 
 /**
  * Class for importing whole metadata graph into the repository.
@@ -43,6 +43,8 @@ class MetadataCollection extends Graph {
 
     const SKIP   = 1;
     const CREATE = 2;
+
+    static public $titleStub = '__TITLE STUB__';
 
     /**
      * Turns debug messages on
@@ -103,7 +105,8 @@ class MetadataCollection extends Graph {
         parent::__construct();
         $this->parseFile($file, $format);
 
-        $this->repo = $repo;
+        $this->repo     = $repo;
+        UriNorm::$rules = $this->repo->getSchema()->uriNorm ?? [];
     }
 
     /**
@@ -203,6 +206,12 @@ class MetadataCollection extends Graph {
             echo self::$debug ? "\tupdating " . $repoRes->getUri() . "\n" : "";
             $meta = $repoRes->getMetadata();
             $meta->merge($res, [$this->repo->getSchema()->id]);
+            // remove the title stub AFTER merging with the current metadata
+            foreach ($meta->allLiterals(RC::titleProp()) as $i) {
+                if ((string) $i === self::$titleStub) {
+                    $meta->delete(RC::titleProp(), $i);
+                }
+            }
             $repoRes->setMetadata($meta);
             $repoRes->updateMetadata();
             $this->handleAutoCommit();
@@ -262,7 +271,6 @@ class MetadataCollection extends Graph {
     private function assureIds(array $resources): array {
         echo self::$debug ? "Assuring all resources to be imported have Ids...\n" : '';
         $idProp    = $this->repo->getSchema()->id;
-        $idNmsp    = $this->repo->getSchema()->ingest->idNamespace;
         $titleProp = $this->repo->getSchema()->label;
 
         $result = [];
@@ -272,32 +280,28 @@ class MetadataCollection extends Graph {
 
             $ids = [];
             foreach ($res->allResources($idProp) as $id) {
-                $ids[] = Geonames::standardize((string) $id);
+                $ids[] = UriNorm::standardize((string) $id);
             }
 
             $found = 'found';
             try {
                 $repoRes = $this->repo->getResourceByIds($ids);
             } catch (NotFound $e) {
-                $meta  = (new Graph())->resource('.');
-                $title = 'title stub created by the MetadataCollection';
+                $meta = (new Graph())->resource('.');
                 foreach ($ids as $id) {
-                    $id = Geonames::standardize((string) $id);
-
+                    $id = UriNorm::standardize((string) $id);
                     $meta->addResource($idProp, $id);
-                    if (strpos($id, $idNmsp) === 0) {
-                        $title = substr($id, strlen($idNmsp));
-                    }
                 }
-                $meta->addLiteral($titleProp, $title, 'en');
+                $meta->addLiteral($titleProp, self::$titleStub, 'en');
                 $repoRes = $this->repo->createResource($meta);
                 $found   = 'new';
                 $this->handleAutoCommit();
             }
-            $uri = $res->getUri();
+            $uri = $repoRes->getUri();
             echo self::$debug ? "\t\t" . $found . ' ' . $uri . "\n" : '';
 
-            $result[$uri] = $repoRes;
+            $result[(string) $res] = $repoRes;
+            $map[(string) $res]    = $uri;
             foreach ($ids as $id) {
                 if ($id !== $uri) {
                     $map[$id] = $uri;
@@ -406,7 +410,7 @@ class MetadataCollection extends Graph {
         }
 
         // maintain geonames ids
-        Geonames::standardizeProperty($res, $idProp);
+        UriNorm::standardizeMeta($res, $idProp);
 
         //$this->repo->fixMetadataReferences($res, [$this->repo->getSchema()->ingest->epicPid]);
 

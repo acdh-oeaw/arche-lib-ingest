@@ -29,27 +29,41 @@ namespace acdhOeaw\acdhRepoIngest\util;
 use EasyRdf\Resource;
 
 /**
- * A simply utility class standardizing the geonames URIs
+ * A simply utility class standardizing the URIs
  *
  * @author zozlak
  */
-class Geonames {
+class UriNorm {
 
     /**
-     * Returns a standardized geonames URI.
+     * Set of rules as an associative array with keys being a match regex and
+     * values being replace regex.
      * 
-     * If the passed URI is not a geonames URI it is returned without any 
-     * modifications.
+     * @var array
+     */
+    static public $rules;
+    
+    /**
+     * Returns a standardized URIs.
+     * 
+     * If the passed URI doesn't match any rule it is returned without
+     * modification.
      * @param string $uri URI to be standardized
      * @return string
      */
     static public function standardize(string $uri): string {
-        $id = preg_replace('|^https?://([^.]+[.])?geonames[.]org/([0-9]+)(/.*)?$|', '\\2', $uri);
-        return $id !== $uri ? 'https://www.geonames.org/' . $id : $uri;
+        foreach ($this->rules as $match => $replace) {
+            $count = 0;
+            $norm = preg_replace($match, $replace, $uri, 1, $count);
+            if ($count) {
+                return $norm;
+            }
+        }
+        return $uri;
     }
 
     /**
-     * Performs geonames URI standardization on a given property of a given
+     * Performs id URI standardization on all id properties of a given
      * metadata resource object.
      * 
      * @param Resource $res metadata to be processed
@@ -58,7 +72,7 @@ class Geonames {
     static public function standardizeProperty(Resource $res, string $property) {
         foreach ($res->allResources($property) as $id) {
             $res->deleteResource($property, $id);
-            $res->addResource($property, Geonames::standardize((string) $id));
+            $res->addResource($property, self::standardize((string) $id));
         }
     }
 }

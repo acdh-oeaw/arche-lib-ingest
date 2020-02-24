@@ -33,7 +33,7 @@ use EasyRdf\Resource;
 use acdhOeaw\acdhRepoLib\BinaryPayload;
 use acdhOeaw\acdhRepoLib\Repo;
 use acdhOeaw\acdhRepoIngest\schema\SchemaObject;
-use acdhOeaw\acdhRepoIngest\util\Geonames;
+use acdhOeaw\acdhRepoIngest\util\UriNorm;
 use acdhOeaw\acdhRepoIngest\metaLookup\MetaLookupInterface;
 
 /**
@@ -275,7 +275,7 @@ class File extends SchemaObject {
             $meta->addLiteral($titleProp, $oldTitle, $oldTitle->getLang());
         }
 
-        Geonames::standardizeProperty($meta, $idProp);
+        UriNorm::standardizeProperty($meta, $idProp);
 
         return $meta;
     }

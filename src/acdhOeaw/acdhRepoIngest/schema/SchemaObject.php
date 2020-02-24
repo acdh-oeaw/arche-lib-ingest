@@ -31,8 +31,7 @@ use acdhOeaw\acdhRepoLib\BinaryPayload;
 use acdhOeaw\acdhRepoLib\Repo;
 use acdhOeaw\acdhRepoLib\RepoResource;
 use acdhOeaw\acdhRepoLib\exception\NotFound;
-use acdhOeaw\acdhRepoLib\exception\NotInCache;
-use acdhOeaw\acdhRepoIngest\util\Geonames;
+use acdhOeaw\acdhRepoIngest\util\UriNorm;
 use acdhOeaw\acdhRepoIngest\util\UUID;
 
 /**
@@ -329,7 +328,7 @@ abstract class SchemaObject {
      */
     protected function createResource(Resource $meta, bool $uploadBinary): void {
         //$this->repo->fixMetadataReferences($meta, [$this->repo->getSchema()->ingest->epicPid]);
-        Geonames::standardizeProperty($meta, $this->repo->getSchema()->id);
+        UriNorm::standardizeProperty($meta, $this->repo->getSchema()->id);
         $binary    = $uploadBinary ? $this->getBinaryData() : null;
         $this->res = $this->repo->createResource($meta, $binary);
     }
@@ -351,7 +350,7 @@ abstract class SchemaObject {
     protected function mergeMetadata(Resource $current, Resource $new): Resource {
         $idProp = $this->repo->getSchema()->id;
         $meta   = $current->merge($new, [$idProp]);
-        Geonames::standardizeMeta($meta, $idProp);
+        UriNorm::standardizeMeta($meta, $idProp);
         return $meta;
     }
 
