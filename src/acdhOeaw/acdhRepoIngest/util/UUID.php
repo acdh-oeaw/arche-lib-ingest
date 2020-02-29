@@ -39,7 +39,7 @@ class UUID {
      * @return string
      */
     static public function v4(): string {
-        $n = array();
+        $n = [];
         for ($i = 0; $i < 8; $i++) {
             $n[$i] = mt_rand(0, 0xffff);
         }

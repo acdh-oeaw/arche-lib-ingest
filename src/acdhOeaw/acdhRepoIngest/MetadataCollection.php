@@ -44,8 +44,6 @@ class MetadataCollection extends Graph {
     const SKIP   = 1;
     const CREATE = 2;
 
-    static public $titleStub = '__TITLE STUB__';
-
     /**
      * Turns debug messages on
      * @var bool
@@ -185,6 +183,8 @@ class MetadataCollection extends Graph {
      * @throws InvalidArgumentException
      */
     public function import(string $namespace, int $singleOutNmsp): array {
+        $idProp = $this->repo->getSchema()->id;
+
         $dict = [self::SKIP, self::CREATE];
         if (!in_array($singleOutNmsp, $dict)) {
             throw new InvalidArgumentException('singleOutNmsp parameters must be one of MetadataCollection::SKIP, MetadataCollection::CREATE');
@@ -193,27 +193,34 @@ class MetadataCollection extends Graph {
 
         $this->removeLiteralIds();
         $this->promoteUrisToIds();
-        $toBeImported  = $this->filterResources($namespace, $singleOutNmsp);
-        $repoResources = $this->assureIds($toBeImported);
+        $this->promoteBNodesToUris();
+        $this->fixReferences();
+        $toBeImported = $this->filterResources($namespace, $singleOutNmsp);
+        //$repoResources = $this->assureIds($toBeImported);
 
+        $repoResources = [];
         foreach ($toBeImported as $n => $res) {
-            $uri     = $res->getUri();
-            $repoRes = $repoResources[$uri];
+            $uri = $res->getUri();
+            //$repoRes = $repoResources[$uri];
 
             echo self::$debug ? "Importing " . $uri . " (" . ($n + 1) . "/" . count($toBeImported) . ")\n" : "";
-            $this->sanitizeResource($res, $namespace);
+            $this->sanitizeResource($res);
 
-            echo self::$debug ? "\tupdating " . $repoRes->getUri() . "\n" : "";
-            $meta = $repoRes->getMetadata();
-            $meta->merge($res, [$this->repo->getSchema()->id]);
-            // remove the title stub AFTER merging with the current metadata
-            foreach ($meta->allLiterals(RC::titleProp()) as $i) {
-                if ((string) $i === self::$titleStub) {
-                    $meta->delete(RC::titleProp(), $i);
-                }
+            try {
+                $ids = array_map(function($x) {
+                    return (string) $x;
+                }, $res->allResources($idProp));
+                $repoRes = $this->repo->getResourceByIds($ids);
+
+                echo self::$debug ? "\tupdating " . $repoRes->getUri() . "\n" : "";
+                $repoRes->setGraph($res);
+                $repoRes->updateMetadata();
+            } catch (NotFound $ex) {
+                $repoRes = $this->repo->createResource($res);
+                echo self::$debug ? "\tcreated " . $repoRes->getUri() . "\n" : "";
             }
-            $repoRes->setMetadata($meta);
-            $repoRes->updateMetadata();
+
+            $repoResources[] = $repoRes;
             $this->handleAutoCommit();
         }
         return array_values($repoResources);
@@ -247,8 +254,6 @@ class MetadataCollection extends Graph {
 
             if (count($ids) == 0) {
                 echo self::$debug ? "\t\tskipping - no ids\n" : '';
-//            } elseif ($this->repo->isAcdhId($res->getUri())) {
-//                echo self::$debug ? "\t\tskipping - ACDH UUID\n" : '';
             } elseif (count($nonIdProps) == 0 && $this->isIdElsewhere($res)) {
                 echo self::$debug ? "\t\tskipping - single id assigned to another resource\n" : '';
             } elseif (count($nonIdProps) == 0 && $singleOutNmsp !== MetadataCollection::CREATE && !$inNmsp) {
@@ -256,72 +261,6 @@ class MetadataCollection extends Graph {
             } else {
                 echo self::$debug ? "\t\tincluding\n" : '';
                 $result[] = $res;
-            }
-        }
-
-        return $result;
-    }
-
-    /**
-     * Assures all resource to be imported have an id so references to
-     * them can be set correctly.
-     * @param array $resources resource to be checked
-     * @return \acdhOeaw\acdhRepoLib\RepoResource[]
-     */
-    private function assureIds(array $resources): array {
-        echo self::$debug ? "Assuring all resources to be imported have Ids...\n" : '';
-        $idProp    = $this->repo->getSchema()->id;
-        $titleProp = $this->repo->getSchema()->label;
-
-        $result = [];
-        $map    = [];
-        foreach ($resources as $n => $res) {
-            echo self::$debug ? "\t" . $res->getUri() . " (" . ($n + 1) . "/" . count($resources) . ")\n" : '';
-
-            $ids = [];
-            foreach ($res->allResources($idProp) as $id) {
-                $ids[] = UriNorm::standardize((string) $id);
-            }
-
-            $found = 'found';
-            try {
-                $repoRes = $this->repo->getResourceByIds($ids);
-            } catch (NotFound $e) {
-                $meta = (new Graph())->resource('.');
-                foreach ($ids as $id) {
-                    $id = UriNorm::standardize((string) $id);
-                    $meta->addResource($idProp, $id);
-                }
-                $meta->addLiteral($titleProp, self::$titleStub, 'en');
-                $repoRes = $this->repo->createResource($meta);
-                $found   = 'new';
-                $this->handleAutoCommit();
-            }
-            $uri = $repoRes->getUri();
-            echo self::$debug ? "\t\t" . $found . ' ' . $uri . "\n" : '';
-
-            $result[(string) $res] = $repoRes;
-            $map[(string) $res]    = $uri;
-            foreach ($ids as $id) {
-                if ($id !== $uri) {
-                    $map[$id] = $uri;
-                }
-            }
-        }
-
-        echo self::$debug ? "Mapping objects to Ids...\n" : '';
-        foreach ($resources as $res) {
-            /* @var $res \EasyRdf\Resource */
-            $properties = array_diff($res->propertyUris($res), [$idProp]);
-            foreach ($properties as $prop) {
-                foreach ($res->allResources($prop) as $value) {
-                    $uri = $value->getUri();
-                    if (isset($map[$uri])) {
-                        $res->delete($prop, $value);
-                        $res->addResource($prop, $map[$uri]);
-                        echo self::$debug ? "\t" . $res->getUri() . " " . $prop . " " . $uri . " to " . $map[$uri] . "\n" : '';
-                    }
-                }
             }
         }
 
@@ -352,23 +291,49 @@ class MetadataCollection extends Graph {
     }
 
     /**
-     * Checks if a node contains wrong edges (blank ones or non-id edges
-     * pointing to ids in $namespace but not being ACDH UUIDs).
+     * To avoid creation of duplicated resources it must be assured every
+     * resource is referenced acrossed the whole graph with only one URI
+     * 
+     * As it doesn't matter which exactly, the resource URI itself is
+     * a convenient choice
+     * 
+     * @return void
+     */
+    private function fixReferences(): void {
+        echo self::$debug ? "Fixing references...\n" : '';
+        $idProp = $this->repo->getSchema()->id;
+        // collect id => uri mappings
+        $map    = [];
+        foreach ($this->resources() as $i) {
+            foreach ($i->allResources($idProp) as $v) {
+                $map[(string) $v] = (string) $i;
+            }
+        }
+        // fix references
+        foreach ($this->resources() as $i) {
+            foreach ($i->propertyUris() as $p) {
+                foreach ($i->allResources($p) as $v) {
+                    $vv = (string) $v;
+                    if (isset($map[$vv]) && $map[$vv] !== $vv) {
+                        echo self::$debug ? "\t$vv => " . $map[$vv] . "\n" : '';
+                        $i->delete($p, $v);
+                        $i->addResource($p, $map[$vv]);
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Checks if a node contains wrong edges (references to blank nodes).
      * 
      * @param Resource $res
-     * @param string $namespace
      * @return bool
      */
-    private function containsWrongRefs(Resource $res, string $namespace): bool {
-        foreach ($res->propertyUris() as $prop) {
-            if ($prop === $this->repo->getSchema()->id) {
-                continue;
-            }
+    private function containsWrongRefs(Resource $res): bool {
+        $properties = array_diff($res->propertyUris(), [$this->repo->getSchema()->id]);
+        foreach ($properties as $prop) {
             foreach ($res->allResources($prop) as $val) {
-//                $valUri   = $val->getUri();
-//                $inNmsp   = strpos($valUri, $namespace) === 0;
-//                $isAcdhId = $this->repo->isAcdhId($valUri);
-//                if ($val->isBNode() || ($inNmsp && !$isAcdhId)) {
                 if ($val->isBNode()) {
                     return true;
                 }
@@ -378,12 +343,45 @@ class MetadataCollection extends Graph {
     }
 
     /**
+     * Promotes BNodes to their first schema:id and fixes references to them.
+     */
+    private function promoteBNodesToUris() {
+        echo self::$debug ? "Promoting BNodes to URIs...\n" : '';
+
+        $idProp = $this->repo->getSchema()->id;
+        $map    = [];
+        foreach ($this->resources() as $i) {
+            $id = $i->getResource($idProp);
+            if ($i->isBNode() && $id !== null) {
+                echo self::$debug ? "\t" . $i->getUri() . " => " . $id->getUri() . "\n" : '';
+                $map[$i->getUri()] = $id;
+                foreach ($i->propertyUris() as $p) {
+                    foreach ($i->all($p) as $v) {
+                        $id->add($p, $v);
+                        $i->delete($p, $v);
+                    }
+                }
+            }
+        }
+        foreach ($this->resources() as $i) {
+            foreach ($i->propertyUris() as $p) {
+                foreach ($i->allResources($p) as $v) {
+                    if (isset($map[$v->getUri()])) {
+                        $i->delete($p, $v);
+                        $i->addResource($p, $map[$v->getUri()]);
+                    }
+                }
+            }
+        }
+    }
+
+    /**
      * Promotes subjects being fully qualified URLs to ids.
      */
     private function promoteUrisToIds(): void {
         echo self::$debug ? "Promoting URIs to ids...\n" : '';
         foreach ($this->resources() as $i) {
-            if (!$i->isBNode()) {
+            if (!$i->isBNode() and count($i->propertyUris()) > 0) {
                 $uri = (string) $i;
                 echo self::$debug ? "\t" . $uri . "\n" : '';
                 $i->addResource($this->repo->getSchema()->id, $uri);
@@ -395,26 +393,22 @@ class MetadataCollection extends Graph {
      * Cleans up resource metadata.
      * 
      * @param Resource $res
-     * @param string $namespace
      * @return \EasyRdf\Resource
      * @throws InvalidArgumentException
      */
-    private function sanitizeResource(Resource $res, string $namespace): Resource {
+    private function sanitizeResource(Resource $res): Resource {
         $idProp     = $this->repo->getSchema()->id;
         $titleProp  = $this->repo->getSchema()->label;
         $relProp    = $this->repo->getSchema()->parent;
         $nonIdProps = array_diff($res->propertyUris(), [$idProp]);
+        // don't do anything when it's purely-id resource
         if (count($nonIdProps) == 0) {
-            // don't do anything when it's purely-id resource
             return $res;
         }
 
-        // maintain geonames ids
-        UriNorm::standardizeMeta($res, $idProp);
+        UriNorm::standardizeProperty($res, $idProp);
 
-        //$this->repo->fixMetadataReferences($res, [$this->repo->getSchema()->ingest->epicPid]);
-
-        if ($this->containsWrongRefs($res, $namespace)) {
+        if ($this->containsWrongRefs($res)) {
             echo $res->copy()->getGraph()->serialise('ntriples') . "\n";
             throw new InvalidArgumentException('resource contains references to blank nodes');
         }

@@ -72,7 +72,7 @@ abstract class SchemaObject {
      * @var array
      * @see $metadata
      */
-    private $metadataPreserve = array();
+    private $metadataPreserve = [];
 
     /**
      * Allows to keep track of the corresponding repository resource state:
@@ -145,7 +145,7 @@ abstract class SchemaObject {
      * @return array list of all ids
      */
     public function getIds(): array {
-        $ids  = array($this->id);
+        $ids  = [$this->id];
         $meta = $this->getMetadata();
         foreach ($meta->allResources($this->repo->getSchema()->id) as $id) {
             $ids[] = $id->getUri();
@@ -213,7 +213,7 @@ abstract class SchemaObject {
      * @param Resource $meta external metadata
      * @param array $preserve list of metadata properties to be kept - see above
      */
-    public function setMetadata(Resource $meta, array $preserve = array()) {
+    public function setMetadata(Resource $meta, array $preserve = []) {
         $this->metadata         = $meta;
         $this->metadataPreserve = $preserve;
     }

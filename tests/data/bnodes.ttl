@@ -1,0 +1,8 @@
+@prefix acdh: <https://vocabs.acdh.oeaw.ac.at/schema#>.
+
+_:r1    acdh:isPartOf      _:r2                ;
+        acdh:hasIdentifier <http://some.id/r1> ;
+        acdh:hasTitle      "bar"@en            .
+_:r2    acdh:hasIdentifier <http://some.id/r2> ;
+        acdh:hasTitle      "foo"@en            .
+

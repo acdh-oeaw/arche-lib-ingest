@@ -52,7 +52,7 @@ class UriNorm {
      * @return string
      */
     static public function standardize(string $uri): string {
-        foreach ($this->rules as $match => $replace) {
+        foreach (self::$rules ?? [] as $match => $replace) {
             $count = 0;
             $norm = preg_replace($match, $replace, $uri, 1, $count);
             if ($count) {

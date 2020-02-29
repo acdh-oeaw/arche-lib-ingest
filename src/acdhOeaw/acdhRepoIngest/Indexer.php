@@ -81,7 +81,7 @@ class Indexer {
      * 
      * @var array
      */
-    private $paths = array();
+    private $paths = [];
 
     /**
      * Regular expression for matching child resource file names.
@@ -432,8 +432,8 @@ class Indexer {
     public function index(): array {
         list($indexed, $commited) = $this->__index();
 
-        $this->indexedRes  = array();
-        $this->commitedRes = array();
+        $this->indexedRes  = [];
+        $this->commitedRes = [];
         return $indexed;
     }
 
@@ -444,27 +444,27 @@ class Indexer {
      *   resources
      */
     private function __index(): array {
-        $this->indexedRes  = array();
-        $this->commitedRes = array();
+        $this->indexedRes  = [];
+        $this->commitedRes = [];
 
         if (count($this->paths) === 0) {
             throw new RuntimeException('No paths set');
         }
 
-        try {
+//        try {
             foreach ($this->paths as $path) {
                 foreach (new DirectoryIterator($this->containerDir() . $path) as $i) {
                     $this->indexEntry($i);
                 }
             }
-        } catch (Throwable $e) {
-            if ($e instanceof IndexerException) {
-                $this->commitedRes = array_merge($this->commitedRes, $e->getCommitedResources());
-            }
-            throw new IndexerException($e->getMessage(), $e->getCode(), $e, $this->commitedRes);
-        }
+//        } catch (Throwable $e) {
+//            if ($e instanceof IndexerException) {
+//                $this->commitedRes = array_merge($this->commitedRes, $e->getCommitedResources());
+//            }
+//            throw new IndexerException($e->getMessage(), $e->getCode(), $e, $this->commitedRes);
+//        }
 
-        return array($this->indexedRes, $this->commitedRes);
+        return [$this->indexedRes, $this->commitedRes];
     }
 
     /**
@@ -528,7 +528,7 @@ class Indexer {
             }
             $ind->setDepth($this->depth - 1);
             $path              = File::getRelPath($i->getPathname(), $this->repo->getSchema()->ingest->containerDir);
-            $ind->setPaths(array($path));
+            $ind->setPaths([$path]);
             list($recRes, $recCom) = $ind->__index();
             $this->indexedRes  = array_merge($this->indexedRes, $recRes);
             $this->commitedRes = array_merge($this->commitedRes, $recCom);
@@ -554,9 +554,9 @@ class Indexer {
             return $res->hasBinaryContent() || $this->skipMode === self::SKIP_EXIST;
         } catch (MetaLookupException $e) {
             if ($this->metaLookupRequire) {
-                return true;
-            } else {
                 throw $e;
+            } else {
+                return true;
             }
         } catch (NotFound $e) {
             return false;

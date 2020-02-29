@@ -24,7 +24,6 @@
  * THE SOFTWARE.
  */
 
-
 namespace acdhOeaw\acdhRepoIngest;
 
 use Exception;
@@ -42,7 +41,7 @@ class IndexerException extends Exception {
      * A collection of already processed resources
      * @var array
      */
-    private $resources = array();
+    private $resources = [];
 
     /**
      * Creates the exception
@@ -53,7 +52,7 @@ class IndexerException extends Exception {
      */
     public function __construct(string $message = "", int $code = 0,
                                 Throwable $previous = null,
-                                array $resources = array()) {
+                                array $resources = []) {
         parent::__construct($message, $code, $previous);
         $this->resources = $resources;
     }

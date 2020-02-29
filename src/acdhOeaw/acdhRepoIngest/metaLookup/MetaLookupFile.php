@@ -64,14 +64,14 @@ class MetaLookupFile implements MetaLookupInterface {
 
     /**
      * Creates a new MetaLookupFile instance.
-     * @param array $locations location to search for metadata files in
+     * @param string[] $locations location to search for metadata files in
      *   (both absolute and relative paths allowed)
      * @param string $extension suffix added to the original filename to form
      *   a metadata file name
      * @param string $format metadata format understandable for 
      *   \EasyRdf\Graph::parseFile() (if null format will be autodetected)
      */
-    public function __construct(array $locations = array(),
+    public function __construct(array $locations = [],
                                 string $extension = '.ttl', $format = null) {
         $this->locations = $locations;
         $this->extension = $extension;
@@ -109,7 +109,7 @@ class MetaLookupFile implements MetaLookupInterface {
                 echo self::$debug ? "    found\n" : '';
                 
                 $graph->parseFile($loc, $this->format);
-                $candidates = array();
+                $candidates = [];
                 foreach ($graph->resources() as $res) {
                     if (count($res->propertyUris()) > 0) {
                         $candidates[] = $res;

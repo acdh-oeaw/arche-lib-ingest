@@ -70,7 +70,6 @@ abstract class TestBase extends \PHPUnit\Framework\TestCase {
         // delete resources starting with the "most metadata rich" which is a simple heuristic for avoiding 
         // unneeded resource updates when deleting one pointed by many others (such resources are typicaly 
         // "metadata poor" therefore deleting them as the last ones should do the job)
-        self::$repo->begin();
         $queue = [];
         foreach ($this->resources as $n => $i) {
             try {
@@ -83,6 +82,7 @@ abstract class TestBase extends \PHPUnit\Framework\TestCase {
             }
         }
         arsort($queue);
+        self::$repo->begin();
         foreach ($queue as $n => $count) {
             try {
                 $this->resources[$n]->delete(true, true);

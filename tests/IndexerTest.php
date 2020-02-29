@@ -152,6 +152,7 @@ class IndexerTest extends TestBase {
 
     /**
      * @group indexer
+     * @group indexerSkip
      */
     public function testSkipBinaryExist(): void {
         $indRes1 = $indRes2 = [];
@@ -163,7 +164,7 @@ class IndexerTest extends TestBase {
         self::$repo->commit();
 
         $this->assertEquals(4, count($indRes1));
-
+        
         $this->ind->setSkip(Indexer::SKIP_BINARY_EXIST);
         $this->ind->setFilter('/(txt|xml)$/', Indexer::MATCH);
         self::$repo->begin();
@@ -368,7 +369,7 @@ class IndexerTest extends TestBase {
         $this->assertEquals(1, count($indRes2));
         $newRes      = array_pop($indRes2);
         $meta        = $newRes->getMetadata();
-        $this->assertEquals($pid, (string) $meta->getResource($pidProp)); // PID copied to the new resource
+        $this->assertEquals($pid, (string) $meta->getResource($pidProp)); // PID copied to the new resource - depends on the repo recognizing pid property as a non-relation one
         $this->assertTrue(in_array($pid, $newRes->getIds())); // depends on PID being copied to id (which is NOT the default repository setup cause the repository doesn't know the PID concept)
         $prevResId = (string) $meta->getResource(self::$repo->getSchema()->ingest->isNewVersion);
         $this->assertTrue(!empty($prevResId));
@@ -409,7 +410,7 @@ class IndexerTest extends TestBase {
         $indRes = $this->ind->index();
         $this->noteResources($indRes);
         self::$repo->commit();
-        $this->assertEquals(77, count($indRes));
+        $this->assertEquals(79, count($indRes));
     }    
     
     /**

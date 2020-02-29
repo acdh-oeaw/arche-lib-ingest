@@ -49,7 +49,7 @@ class MetadataCollectionTest extends TestBase {
         $this->noteResources($indRes);
         self::$repo->commit();
 
-        $this->assertEquals(4, count($indRes));
+        $this->assertEquals(2, count($indRes));
     }
 
     /**
@@ -62,7 +62,7 @@ class MetadataCollectionTest extends TestBase {
         $this->noteResources($indRes1);
         self::$repo->commit();
 
-        $this->assertEquals(4, count($indRes1));
+        $this->assertEquals(2, count($indRes1));
 
         $graph   = new MetadataCollection(self::$repo, __DIR__ . '/data/graph-small.ttl');
         self::$repo->begin();
@@ -70,7 +70,7 @@ class MetadataCollectionTest extends TestBase {
         $this->noteResources($indRes2);
         self::$repo->commit();
 
-        $this->assertEquals(4, count($indRes2));
+        $this->assertEquals(2, count($indRes2));
         $r1u = $r2u = [];
         foreach ($indRes1 as $i) {
             $r1u[] = $i->getUri();
@@ -109,11 +109,59 @@ class MetadataCollectionTest extends TestBase {
     }
 
     /**
+     * @group metadataCollection
+     */
+    public function testBNodes(): void {
+        $graph  = new MetadataCollection(self::$repo, __DIR__ . '/data/bnodes.ttl');
+        self::$repo->begin();
+        $indRes = $graph->import('https://id.acdh.oeaw.ac.at/', MetadataCollection::SKIP);
+        $this->noteResources($indRes);
+        self::$repo->commit();
+
+        $this->assertEquals(2, count($indRes));
+    }
+
+    /**
+     * @group metadataCollection
+     */
+    public function testAutoRefsCreation(): void {
+        $graph                     = new MetadataCollection(self::$repo, __DIR__ . '/data/graph-autorefs.ttl');
+        self::$repo->begin();
+        $indRes                    = $graph->import('https://id.acdh.oeaw.ac.at/', MetadataCollection::SKIP);
+        $this->noteResources($indRes);
+        self::$repo->commit();
+
+        $this->assertEquals(3, count($indRes));
+    }
+
+    /**
+     * @group metadataCollection
+     */
+    public function testBasicResources(): void {
+        $graph                     = new MetadataCollection(self::$repo, __DIR__ . '/data/basicResources.ttl');
+        self::$repo->begin();
+        $indRes                    = $graph->import('https://id.acdh.oeaw.ac.at/', MetadataCollection::SKIP);
+        $this->noteResources($indRes);
+        self::$repo->commit();
+
+        $this->assertEquals(14, count($indRes));
+
+        // repeat to make sure there are no issues with resource duplication, etc.
+        $graph                     = new MetadataCollection(self::$repo, __DIR__ . '/data/basicResources.ttl');
+        self::$repo->begin();
+        $indRes                    = $graph->import('https://id.acdh.oeaw.ac.at/', MetadataCollection::SKIP);
+        $this->noteResources($indRes);
+        self::$repo->commit();
+
+        $this->assertEquals(14, count($indRes));
+    }
+
+    /**
      * @large
      * @group largeMetadataCollection
      */
     public function testBig(): void {
-        $graph           = new MetadataCollection(self::$repo, __DIR__ . '/data/schnitzler-diaries.rdf');
+        $graph  = new MetadataCollection(self::$repo, __DIR__ . '/data/schnitzler-diaries.rdf');
         self::$repo->begin();
         $indRes = $graph->import('https://id.acdh.oeaw.ac.at/', MetadataCollection::SKIP);
         $this->noteResources($indRes);

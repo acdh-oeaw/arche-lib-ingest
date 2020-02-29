@@ -6,16 +6,17 @@
 
 
 _:tunico_corpus
-    a acdh:Corpus;        
-    dct:identifier <https://id.acdh.oeaw.ac.at/tunico-corpus-2> ;
-    dct:identifier "P02" ;
-    dc:title "Tunico Corpus" ;
-    acdh:hasIdentifier <https://geonames.org/123/> ;
-    dct:creator <https://some.external/entity>.
+    a                   acdh:Corpus                                  ;
+    dct:identifier      <https://id.acdh.oeaw.ac.at/tunico-corpus-2> ;
+    dct:identifier      "P02"                                        ;
+    acdh:hasIdentifier  <https://id.acdh.oeaw.ac.at/tunico-corpus-2> ;
+    dc:title            "Tunico Corpus"                              ;
+    dct:creator         <https://some.external/entity>               .
 
 _:tunico_text1
-    a acdh:DigitalResource;
-    dct:identifier <https://id.acdh.oeaw.ac.at/tunico-corpus-1>;
-    dct:isPartOf _:tunico_corpus;
-    dct:isPartOf <https://id.acdh.oeaw.ac.at/tunico/someId>;
-    dc:title "Tunico Text 1".
+    a                   acdh:DigitalResource                         ;
+    dct:identifier      <https://id.acdh.oeaw.ac.at/tunico-corpus-1> ;
+    dct:isPartOf        _:tunico_corpus                              ;
+    dct:isPartOf        <https://id.acdh.oeaw.ac.at/tunico/someId>   ;
+    acdh:hasIdentifier  <https://id.acdh.oeaw.ac.at/tunico-corpus-1> ;
+    dc:title            "Tunico Text 1"                              .

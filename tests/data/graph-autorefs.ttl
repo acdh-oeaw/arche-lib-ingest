@@ -1,0 +1,15 @@
+@prefix acdh: <https://vocabs.acdh.oeaw.ac.at/schema#>.
+@prefix acdhi: <https://id.acdh.oeaw.ac.at/>.
+
+acdhi:id1 
+    acdh:isPartOf      acdhi:id3 ;
+    acdh:hasTitle      "foo"@en  .
+
+acdhi:id2 
+    acdh:isPartOf      acdhi:id4 ;
+    acdh:hasTitle      "bar"@en  .
+
+_:r1
+    acdh:hasIdentifier acdhi:id3 ;
+    acdh:hasIdentifier acdhi:id4 ;
+    acdh:hasTitle      "foo"@en  .
