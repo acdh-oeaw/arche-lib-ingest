@@ -311,7 +311,8 @@ class MetadataCollection extends Graph {
         }
         // fix references
         foreach ($this->resources() as $i) {
-            foreach ($i->propertyUris() as $p) {
+            $properties = array_diff($i->propertyUris(), [$idProp]);
+            foreach ($properties as $p) {
                 foreach ($i->allResources($p) as $v) {
                     $vv = (string) $v;
                     if (isset($map[$vv]) && $map[$vv] !== $vv) {

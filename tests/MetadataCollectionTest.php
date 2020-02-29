@@ -125,9 +125,9 @@ class MetadataCollectionTest extends TestBase {
      * @group metadataCollection
      */
     public function testAutoRefsCreation(): void {
-        $graph                     = new MetadataCollection(self::$repo, __DIR__ . '/data/graph-autorefs.ttl');
+        $graph  = new MetadataCollection(self::$repo, __DIR__ . '/data/graph-autorefs.ttl');
         self::$repo->begin();
-        $indRes                    = $graph->import('https://id.acdh.oeaw.ac.at/', MetadataCollection::SKIP);
+        $indRes = $graph->import('https://id.acdh.oeaw.ac.at/', MetadataCollection::SKIP);
         $this->noteResources($indRes);
         self::$repo->commit();
 
@@ -138,18 +138,18 @@ class MetadataCollectionTest extends TestBase {
      * @group metadataCollection
      */
     public function testBasicResources(): void {
-        $graph                     = new MetadataCollection(self::$repo, __DIR__ . '/data/basicResources.ttl');
+        $graph  = new MetadataCollection(self::$repo, __DIR__ . '/data/basicResources.ttl');
         self::$repo->begin();
-        $indRes                    = $graph->import('https://id.acdh.oeaw.ac.at/', MetadataCollection::SKIP);
+        $indRes = $graph->import('https://id.acdh.oeaw.ac.at/', MetadataCollection::SKIP);
         $this->noteResources($indRes);
         self::$repo->commit();
 
         $this->assertEquals(14, count($indRes));
 
         // repeat to make sure there are no issues with resource duplication, etc.
-        $graph                     = new MetadataCollection(self::$repo, __DIR__ . '/data/basicResources.ttl');
+        $graph  = new MetadataCollection(self::$repo, __DIR__ . '/data/basicResources.ttl');
         self::$repo->begin();
-        $indRes                    = $graph->import('https://id.acdh.oeaw.ac.at/', MetadataCollection::SKIP);
+        $indRes = $graph->import('https://id.acdh.oeaw.ac.at/', MetadataCollection::SKIP);
         $this->noteResources($indRes);
         self::$repo->commit();
 
