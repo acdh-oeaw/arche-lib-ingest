@@ -213,7 +213,7 @@ class MetadataCollection extends Graph {
                 $repoRes = $this->repo->getResourceByIds($ids);
 
                 echo self::$debug ? "\tupdating " . $repoRes->getUri() . "\n" : "";
-                $repoRes->setGraph($res);
+                $repoRes->setMetadata($res);
                 $repoRes->updateMetadata();
             } catch (NotFound $ex) {
                 $repoRes = $this->repo->createResource($res);

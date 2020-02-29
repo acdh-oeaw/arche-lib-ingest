@@ -145,7 +145,11 @@ class MetadataCollectionTest extends TestBase {
         self::$repo->commit();
 
         $this->assertEquals(14, count($indRes));
-
+        $acdh     = self::$repo->getResourceById('https://viaf.org/viaf/6515148451584915970000');
+        $acdhMeta = $acdh->getMetadata();
+        $this->assertEquals(1010, (int) $acdhMeta->getLiteral('https://vocabs.acdh.oeaw.ac.at/schema#hasPostcode')->getValue());
+        $this->assertEquals('Austrian Centre for Digital Humanities and Cultural Heritage', (string) $acdhMeta->getLiteral('https://vocabs.acdh.oeaw.ac.at/schema#hasTitle'));
+        
         // repeat to make sure there are no issues with resource duplication, etc.
         $graph  = new MetadataCollection(self::$repo, __DIR__ . '/data/basicResources.ttl');
         self::$repo->begin();
