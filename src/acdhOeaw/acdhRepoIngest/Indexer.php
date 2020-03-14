@@ -30,7 +30,6 @@ use BadMethodCallException;
 use DateTime;
 use DirectoryIterator;
 use RuntimeException;
-use Throwable;
 use acdhOeaw\acdhRepoLib\exception\NotFound;
 use acdhOeaw\acdhRepoLib\Repo;
 use acdhOeaw\acdhRepoLib\RepoResource;

@@ -222,8 +222,8 @@ abstract class SchemaObject {
      * Creates a new version of the resource. The new version inherits all IDs but
      * the UUID and epic PIDs. The old version looses all IDs but the UUID and
      * spic PIDs. It also looses all schema::parent property connections with collections.
-     * The old and the new resource are linked with `schema:isNewVersion`
-     * and `schema:isOldVersion`.
+     * The old and the new resource are linked with `schema:versioning:isNewOf`
+     * and `schema:versioning.isOldOf`.
      * 
      * @param bool $uploadBinary should binary data of the real-world entity
      *   be uploaded uppon repository resource creation?
@@ -237,13 +237,13 @@ abstract class SchemaObject {
      */
     public function createNewVersion(bool $uploadBinary = true,
                                      bool $pidPass = false): RepoResource {
-        $pidProp       = $this->repo->getSchema()->ingest->epicPid;
+        $pidProp       = $this->repo->getSchema()->ingest->pid;
         $idProp        = $this->repo->getSchema()->id;
         $relProp       = $this->repo->getSchema()->parent;
         $repoIdNmsp    = $this->repo->getBaseUrl();
-        $vidNmsp       = $this->repo->getSchema()->ingest->vidNamespace;
-        $isNewVerProp  = $this->repo->getSchema()->ingest->isNewVersion;
-        $isPrevVerProp = $this->repo->getSchema()->ingest->isPrevVersion;
+        $vidNmsp       = $this->repo->getSchema()->namespaces->vid;
+        $isNewVerProp  = $this->repo->getSchema()->versioning->isNewOf;
+        $isPrevVerProp = $this->repo->getSchema()->versioning->isPrevOf;
         $skipProp      = [$idProp];
         if (!$pidPass) {
             $skipProp[] = $pidProp;
@@ -327,7 +327,6 @@ abstract class SchemaObject {
      * @param string $path
      */
     protected function createResource(Resource $meta, bool $uploadBinary): void {
-        //$this->repo->fixMetadataReferences($meta, [$this->repo->getSchema()->ingest->epicPid]);
         UriNorm::standardizeProperty($meta, $this->repo->getSchema()->id);
         $binary    = $uploadBinary ? $this->getBinaryData() : null;
         $this->res = $this->repo->createResource($meta, $binary);
