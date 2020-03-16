@@ -1,8 +1,8 @@
 {
-    "name": "acdh-oeaw/acdh-repo-ingest",
+    "name": "acdh-oeaw/arche-lib-ingest",
     "description": "A library for ingesting data into the ACDH digital objects repository",
     "keywords": [],
-    "homepage": "https://github.com/zozlak/acdh-repo-ingest",
+    "homepage": "https://github.com/acdh-oeaw/arche-lib-ingest",
     "license": "MIT",
     "authors": [
         {
@@ -11,8 +11,8 @@
         }
     ],
     "require": {
-        "guzzlehttp/guzzle": "*",
-        "acdh-oeaw/acdh-repo-lib": "*",
+        "guzzlehttp/guzzle": "^6",
+        "acdh-oeaw/arche-lib": "^1",
         "acdh-oeaw/easyrdf": "*",
         "acdh-oeaw/uri-normalizer": "*"
     },
