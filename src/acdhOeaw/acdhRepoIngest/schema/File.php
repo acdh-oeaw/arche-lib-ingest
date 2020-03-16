@@ -33,8 +33,8 @@ use EasyRdf\Resource;
 use acdhOeaw\acdhRepoLib\BinaryPayload;
 use acdhOeaw\acdhRepoLib\Repo;
 use acdhOeaw\acdhRepoIngest\schema\SchemaObject;
-use acdhOeaw\acdhRepoIngest\util\UriNorm;
 use acdhOeaw\acdhRepoIngest\metaLookup\MetaLookupInterface;
+use acdhOeaw\UriNormalizer;
 
 /**
  * Description of File
@@ -275,7 +275,7 @@ class File extends SchemaObject {
             $meta->addLiteral($titleProp, $oldTitle, $oldTitle->getLang());
         }
 
-        UriNorm::standardizeProperty($meta, $idProp);
+        UriNormalizer::gNormalizeMeta($meta, $idProp);
 
         return $meta;
     }

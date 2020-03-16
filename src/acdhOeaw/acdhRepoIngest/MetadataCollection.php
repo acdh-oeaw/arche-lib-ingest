@@ -32,7 +32,7 @@ use EasyRdf\Resource;
 use acdhOeaw\acdhRepoLib\Repo;
 use acdhOeaw\acdhRepoLib\RepoResource;
 use acdhOeaw\acdhRepoLib\exception\NotFound;
-use acdhOeaw\acdhRepoIngest\util\UriNorm;
+use acdhOeaw\UriNormalizer;
 
 /**
  * Class for importing whole metadata graph into the repository.
@@ -103,8 +103,8 @@ class MetadataCollection extends Graph {
         parent::__construct();
         $this->parseFile($file, $format);
 
-        $this->repo     = $repo;
-        UriNorm::$rules = $this->repo->getSchema()->uriNorm ?? [];
+        $this->repo = $repo;
+        UriNormalizer::init((array) ($this->repo->getSchema()->uriNorm ?? []));
     }
 
     /**
@@ -407,7 +407,7 @@ class MetadataCollection extends Graph {
             return $res;
         }
 
-        UriNorm::standardizeProperty($res, $idProp);
+        UriNormalizer::gNormalizeMeta($res, $idProp);
 
         if ($this->containsWrongRefs($res)) {
             echo $res->copy()->getGraph()->serialise('ntriples') . "\n";

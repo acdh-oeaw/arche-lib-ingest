@@ -13,7 +13,8 @@
     "require": {
         "guzzlehttp/guzzle": "*",
         "acdh-oeaw/acdh-repo-lib": "*",
-        "acdh-oeaw/easyrdf": "*"
+        "acdh-oeaw/easyrdf": "*",
+        "acdh-oeaw/uri-normalizer": "*"
     },
     "autoload": {
         "psr-4": {
