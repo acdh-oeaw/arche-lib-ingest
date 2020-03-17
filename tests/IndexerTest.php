@@ -38,6 +38,7 @@ use acdhOeaw\acdhRepoLib\exception\NotFound;
  */
 class IndexerTest extends TestBase {
 
+    const URI_PREFIX = 'acdhContainer://';
     static private $res;
 
     static public function setUpBeforeClass(): void {
@@ -78,7 +79,7 @@ class IndexerTest extends TestBase {
 
     public function setUp(): void {
         parent::setUp();
-        $this->ind = new Indexer();
+        $this->ind = new Indexer(__DIR__, self::URI_PREFIX);
         $this->ind->setDepth(1);
         $this->ind->setParent(self::$res);
         $this->ind->setUploadSizeLimit(10000000);

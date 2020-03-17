@@ -33,8 +33,6 @@ schema:
     ingest:
         pid: https://vocabs.acdh.oeaw.ac.at/schema#hasPid
         location: https://vocabs.acdh.oeaw.ac.at/schema#hasLocationPath
-        containerDir: /home/zozlak/roboty/ACDH/repo/rdbms-lib-ingest/tests
-        containerToUriPrefix: acdhContainer://
         defaultBinaryClass: ''
         defaultCollectionClass: ''
     uriNorm: []

@@ -27,9 +27,12 @@
 namespace acdhOeaw\acdhRepoIngest;
 
 use BadMethodCallException;
+use InvalidArgumentException;
+use RuntimeException;
 use DateTime;
 use DirectoryIterator;
 use RuntimeException;
+use acdhOeaw\UriNormalizer;
 use acdhOeaw\acdhRepoLib\exception\NotFound;
 use acdhOeaw\acdhRepoLib\Repo;
 use acdhOeaw\acdhRepoLib\RepoResource;
@@ -58,6 +61,68 @@ class Indexer {
     const PID_PASS          = 2;
 
     /**
+     * Detected operating system path enconding.
+     * @var string
+     */
+    static private $pathEncoding;
+
+    /**
+     * Extracts relative path from a full path (by skipping cfg:containerDir)
+     * @param string $fullPath
+     * @param string $containerDir
+     */
+    static public function getRelPath(string $fullPath, string $containerDir): string {
+        if (!strpos($fullPath, $containerDir) === 0) {
+            throw new InvalidArgumentException('path is outside the container');
+        }
+        $containerDir = preg_replace('|/$|', '', $containerDir);
+        return substr($fullPath, strlen($containerDir) + 1);
+    }
+
+    /**
+     * Tries to detect path encoding used in the operating system by looking
+     * into locale settings.
+     * @throws RuntimeException
+     */
+    static private function detectPathEncoding() {
+        if (self::$pathEncoding) {
+            return;
+        }
+        foreach (explode(';', setlocale(LC_ALL, 0)) as $i) {
+            $i = explode('=', $i);
+            if ($i[0] === 'LC_CTYPE') {
+                $tmp = preg_replace('|^.*[.]|', '', $i[1]);
+                if (is_numeric($tmp)) {
+                    self::$pathEncoding = 'windows-' . $tmp;
+                    break;
+                } else if (preg_match('|utf-?8|i', $tmp)) {
+                    self::$pathEncoding = 'utf-8';
+                    break;
+                } else {
+                    throw new RuntimeException('Operation system encoding can not be determined');
+                }
+            }
+        }
+    }
+
+    /**
+     * Sanitizes file path - turns all \ into / and assures it is UTF-8 encoded.
+     * @param string $path
+     * @param string $pathEncoding
+     * @return string
+     */
+    static public function sanitizePath(string $path,
+                                        string $pathEncoding = null): string {
+        if ($pathEncoding === null) {
+            self::detectPathEncoding();
+            $pathEncoding = self::$pathEncoding;
+        }
+        $path = iconv($pathEncoding, 'utf-8', $path);
+        $path = str_replace('\\', '/', $path);
+        return $path;
+    }
+
+    /**
      * Turns debug messages on
      * @var bool
      */
@@ -74,13 +139,13 @@ class Indexer {
      * 
      * It is a concatenation of the container root path coming from the
      * class settings and the location path
-     * properties of the RepoResource.
+     * properties of the RepoResource set using the `setParent()` method.
      * 
      * They can be also set manually using the `setPaths()` method
      * 
      * @var array
      */
-    private $paths = [];
+    private $paths = [''];
 
     /**
      * Regular expression for matching child resource file names.
@@ -139,6 +204,22 @@ class Indexer {
      * @var int
      */
     private $autoCommit = 0;
+
+    /**
+     * Base ingestion path to be substituted with the $containerToUriPrefix
+     * to form a binary id.
+     * 
+     * @var string
+     */
+    private $containerDir;
+
+    /**
+     * Namespaces to substitute the $containerDir in the ingested binary path
+     * to form a binary id.
+     * 
+     * @var string
+     */
+    private $containerToUriPrefix;
 
     /**
      * Should resources be created for empty directories.
@@ -206,6 +287,17 @@ class Indexer {
     private $indexedRes;
 
     /**
+     * 
+     * @param string $containerDir
+     * @param string $containerToUriPrefix
+     */
+    public function __construct(string $containerDir,
+                                string $containerToUriPrefix) {
+        $this->containerDir         = preg_replace('|/$|', '', $containerDir) . '/';
+        $this->containerToUriPrefix = preg_replace('|/$|', '', $containerToUriPrefix) . '/';
+    }
+
+    /**
      * Sets the repository connection object
      * @param \acdhOeaw\acdhRepoLib\Repo
      */
@@ -216,7 +308,12 @@ class Indexer {
     }
 
     /**
-     * Sets the parent resource for the indexed files
+     * Sets the parent resource for the indexed files.
+     * 
+     * Automatically sets ingestion paths based on the resource's 
+     * cfg.schema.ingest.location RDF property values (only existing directories
+     * are set).
+     * 
      * @param \acdhOeaw\acdhRepoLib\RepoResource $resource
      */
     public function setParent(RepoResource $resource): Indexer {
@@ -225,8 +322,9 @@ class Indexer {
         $this->readRepoConfig();
         $metadata     = $this->parent->getMetadata();
         $locations    = $metadata->allLiterals($this->repo->getSchema()->ingest->location);
+        $this->paths  = [];
         foreach ($locations as $i) {
-            $loc = preg_replace('|/$|', '', $this->containerDir() . $i->getValue());
+            $loc = preg_replace('|/$|', '', $this->containerDir . $i->getValue());
             if (is_dir($loc)) {
                 $this->paths[] = $i->getValue();
             }
@@ -412,6 +510,27 @@ class Indexer {
     }
 
     /**
+     * Sets up the ingestion container path. This path is replaced with the
+     * $containerToUriPrefix to form a binary id.
+     * @param string $containerDir container dir path
+     * @return \acdhOeaw\acdhRepoIngest\Indexer
+     */
+    public function setContainerDir(string $containerDir): Indexer {
+        $this->containerDir = $containerDir;
+        return $this;
+    }
+
+    /**
+     * Sets up the namespace replaceing the $containerDir to form a binary id.
+     * @param string $prefix namespace
+     * @return \acdhOeaw\acdhRepoIngest\Indexer
+     */
+    public function setContainerToUriPrefix(string $prefix): Indexer {
+        $this->containerToUriPrefix = $prefix;
+        return $this;
+    }
+
+    /**
      * Sets a class providing metadata for indexed files.
      * @param MetaLookupInterface $metaLookup
      * @param bool $require should files lacking external metadata be skipped
@@ -450,18 +569,18 @@ class Indexer {
             throw new RuntimeException('No paths set');
         }
 
-//        try {
+        try {
             foreach ($this->paths as $path) {
-                foreach (new DirectoryIterator($this->containerDir() . $path) as $i) {
+                foreach (new DirectoryIterator($this->containerDir . $path) as $i) {
                     $this->indexEntry($i);
                 }
             }
-//        } catch (Throwable $e) {
-//            if ($e instanceof IndexerException) {
-//                $this->commitedRes = array_merge($this->commitedRes, $e->getCommitedResources());
-//            }
-//            throw new IndexerException($e->getMessage(), $e->getCode(), $e, $this->commitedRes);
-//        }
+        } catch (Throwable $e) {
+            if ($e instanceof IndexerException) {
+                $this->commitedRes = array_merge($this->commitedRes, $e->getCommitedResources());
+            }
+            throw new IndexerException($e->getMessage(), $e->getCode(), $e, $this->commitedRes);
+        }
 
         return [$this->indexedRes, $this->commitedRes];
     }
@@ -483,9 +602,11 @@ class Indexer {
 
         $skip2 = false; // to be able to recursively go into directory we can't reuse $skip
         if (!$skip) {
-            $class  = $i->isDir() ? $this->collectionClass : $this->binaryClass;
-            $parent = $this->parent === null ? null : $this->parent->getUri();
-            $file   = new File($this->repo, $i->getPathname(), $class, $parent);
+            $location = self::getRelPath(self::sanitizePath($i->getPathname()), $this->containerDir);
+            $id       = $this->containerToUriPrefix . str_replace('%2F', '/', rawurlencode($location));
+            $class    = $i->isDir() ? $this->collectionClass : $this->binaryClass;
+            $parent   = $this->parent === null ? null : $this->parent->getUri();
+            $file     = new File($this->repo, $id, $i->getPathname(), $location, $class, $parent);
             if ($this->metaLookup) {
                 $file->setMetaLookup($this->metaLookup, $this->metaLookupRequire);
             }
@@ -526,7 +647,7 @@ class Indexer {
                 $ind->parent = $res;
             }
             $ind->setDepth($this->depth - 1);
-            $path              = File::getRelPath($i->getPathname(), $this->repo->getSchema()->ingest->containerDir);
+            $path              = self::getRelPath($i->getPathname(), $this->repo->getSchema()->ingest->containerDir);
             $ind->setPaths([$path]);
             list($recRes, $recCom) = $ind->__index();
             $this->indexedRes  = array_merge($this->indexedRes, $recRes);
@@ -655,18 +776,11 @@ class Indexer {
         }
     }
 
-    /**
-     * Returns standardized value of the containerDir configuration property.
-     * @return string
-     */
-    public function containerDir(): string {
-        return preg_replace('|/$|', '', $this->repo->getSchema()->ingest->containerDir) . '/';
-    }
-
     private function readRepoConfig(): void {
         $c                     = $this->repo->getSchema()->ingest;
         $this->binaryClass     = $c->indexerDefaultBinaryClass;
         $this->collectionClass = $c->indexerDefaultCollectionClass;
+        UriNormalizer::init((array) ($this->repo->getSchema()->uriNorm ?? []));
     }
 
     private function getFileHash(string $path, string $hashName): string {

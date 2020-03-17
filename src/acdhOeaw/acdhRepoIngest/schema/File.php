@@ -26,8 +26,6 @@
 
 namespace acdhOeaw\acdhRepoIngest\schema;
 
-use RuntimeException;
-use InvalidArgumentException;
 use EasyRdf\Graph;
 use EasyRdf\Resource;
 use acdhOeaw\acdhRepoLib\BinaryPayload;
@@ -42,68 +40,6 @@ use acdhOeaw\UriNormalizer;
  * @author zozlak
  */
 class File extends SchemaObject {
-
-    /**
-     * Detected operating system path enconding.
-     * @var string
-     */
-    static private $pathEncoding;
-
-    /**
-     * Extracts relative path from a full path (by skipping cfg:containerDir)
-     * @param string $fullPath
-     * @param string $containerDir
-     */
-    static public function getRelPath(string $fullPath, string $containerDir): string {
-        if (!strpos($fullPath, $containerDir) === 0) {
-            throw new InvalidArgumentException('path is outside the container');
-        }
-        $containerDir = preg_replace('|/$|', '', $containerDir);
-        return substr($fullPath, strlen($containerDir) + 1);
-    }
-
-    /**
-     * Tries to detect path encoding used in the operating system by looking
-     * into locale settings.
-     * @throws RuntimeException
-     */
-    static private function detectPathEncoding() {
-        if (self::$pathEncoding) {
-            return;
-        }
-        foreach (explode(';', setlocale(LC_ALL, 0)) as $i) {
-            $i = explode('=', $i);
-            if ($i[0] === 'LC_CTYPE') {
-                $tmp = preg_replace('|^.*[.]|', '', $i[1]);
-                if (is_numeric($tmp)) {
-                    self::$pathEncoding = 'windows-' . $tmp;
-                    break;
-                } else if (preg_match('|utf-?8|i', $tmp)) {
-                    self::$pathEncoding = 'utf-8';
-                    break;
-                } else {
-                    throw new RuntimeException('Operation system encoding can not be determined');
-                }
-            }
-        }
-    }
-
-    /**
-     * Sanitizes file path - turns all \ into / and assures it is UTF-8 encoded.
-     * @param string $path
-     * @param string $pathEncoding
-     * @return string
-     */
-    static public function sanitizePath(string $path,
-                                        string $pathEncoding = null): string {
-        if ($pathEncoding === null) {
-            self::detectPathEncoding();
-            $pathEncoding = self::$pathEncoding;
-        }
-        $path = iconv($pathEncoding, 'utf-8', $path);
-        $path = str_replace('\\', '/', $path);
-        return $path;
-    }
 
     /**
      * File path
@@ -125,6 +61,12 @@ class File extends SchemaObject {
     private $metaLookupRequire = false;
 
     /**
+     * RDF location triple value (binary location relative to the container)
+     * @var string 
+     */
+    private $location;
+
+    /**
      * RDF class to be set as a this file's type.
      * @var string
      */
@@ -139,24 +81,24 @@ class File extends SchemaObject {
 
     /**
      * Creates an object representing a file (or a directory) in a filesystem.
-     * @param Fedora $repo repository connection object
-     * @param type $id file path
+     * @param Repo $repo repository connection object
+     * @param string $id file id
+     * @param string $path file path
+     * @param string $location RDF location triple value
      * @param string $class RDF class to be used as a repository resource type
      * @param string $parent URI of a repository resource being parent of 
      *   created one
      */
-    public function __construct(Repo $repo, string $id, string $class = null,
+    public function __construct(Repo $repo, string $id, string $path = null,
+                                string $location = null, string $class = null,
                                 string $parent = null) {
-        $this->repo   = $repo;
-        $this->path   = $id;
-        $this->class  = $class;
-        $this->parent = $parent;
+        $this->repo     = $repo;
+        $this->path     = $path;
+        $this->location = $location;
+        $this->class    = $class;
+        $this->parent   = $parent;
 
-        $prefix = $this->repo->getSchema()->ingest->containerToUriPrefix;
-        $id     = self::sanitizePath($id);
-        $id     = self::getRelPath($id, $this->repo->getSchema()->ingest->containerDir);
-        $id     = str_replace('%2F', '/', rawurlencode($id));
-        parent::__construct($repo, $prefix . $id);
+        parent::__construct($repo, $id);
     }
 
     /**
@@ -184,8 +126,7 @@ class File extends SchemaObject {
             $meta->addResource($relProp, $this->parent);
         }
 
-        $location = self::getRelPath(self::sanitizePath($this->path), $this->repo->getSchema()->ingest->containerDir);
-        $meta->addLiteral($this->repo->getSchema()->ingest->location, $location);
+        $meta->addLiteral($this->repo->getSchema()->ingest->location, $this->location);
 
         $meta->addLiteral($titleProp, basename($this->path));
         $meta->addLiteral('http://www.ebu.ch/metadata/ontologies/ebucore/ebucore#filename', basename($this->path));
