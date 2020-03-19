@@ -402,7 +402,7 @@ class Indexer {
     /**
      * Sets default RDF class for imported collections.
      * 
-     * Overrides setting read form the `cfg::indexerDefaultCollectionClass` 
+     * Overrides setting read form the `cfg::defaultCollectionClass` 
      * configuration property.
      * @param string $class
      * @return \acdhOeaw\util\Indexer
@@ -415,7 +415,7 @@ class Indexer {
     /**
      * Sets default RDF class for imported binary resources.
      * 
-     * Overrides setting read form the `cfg::indexerDefaultBinaryClass` 
+     * Overrides setting read form the `cfg::defaultBinaryClass` 
      * configuration property.
      * @param string $class
      * @return \acdhOeaw\util\Indexer
@@ -777,8 +777,8 @@ class Indexer {
 
     private function readRepoConfig(): void {
         $c                     = $this->repo->getSchema()->ingest;
-        $this->binaryClass     = $c->indexerDefaultBinaryClass;
-        $this->collectionClass = $c->indexerDefaultCollectionClass;
+        $this->binaryClass     = $c->defaultBinaryClass;
+        $this->collectionClass = $c->defaultCollectionClass;
         UriNormalizer::init((array) ($this->repo->getSchema()->uriNorm ?? []));
     }
 
