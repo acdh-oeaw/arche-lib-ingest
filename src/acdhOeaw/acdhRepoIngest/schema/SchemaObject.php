@@ -69,8 +69,7 @@ abstract class SchemaObject {
     /**
      * List of automaticaly generated metadata properties to be preserved while
      * merging with external metadata.
-     * @var array
-     * @see $metadata
+     * @var string[]
      */
     private $metadataPreserve = [];
 

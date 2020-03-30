@@ -335,7 +335,7 @@ class Indexer {
      * Overrides file system paths to look into for child resources.
      * 
      * @param array $paths
-     * @return \acdhOeaw\util\Indexer
+     * @return Indexer
      */
     public function setPaths(array $paths): Indexer {
         $this->paths = $paths;
@@ -351,7 +351,7 @@ class Indexer {
      * don't want to do that for performance reasons).
      * @param int $count number of resource automatically triggering a commit 
      *   (0 - no auto commit)
-     * @return \acdhOeaw\util\Indexer
+     * @return Indexer
      */
     public function setAutoCommit(int $count): Indexer {
         $this->autoCommit = $count;
@@ -365,7 +365,7 @@ class Indexer {
      * @param int $skipMode mode either Indexer::SKIP_NONE (default), 
      *   Indexer::SKIP_NOT_EXIST, Indexer::SKIP_EXIST or 
      *   Indexer::SKIP_BINARY_EXIST
-     * @return \acdhOeaw\util\Indexer
+     * @return Indexer
      */
     public function setSkip(int $skipMode): Indexer {
         if (!in_array($skipMode, [self::SKIP_NONE, self::SKIP_NOT_EXIST, self::SKIP_EXIST,
@@ -385,7 +385,7 @@ class Indexer {
      *   Indexer::VERSIONING_DATE
      * @param int $migratePid should PIDs (epic handles) be migrated to the new
      *   version - either Indexer::MIGRATE_NO or Indexer::MIGRATE_YES
-     * @return \acdhOeaw\util\Indexer
+     * @return Indexer
      * @throws BadMethodCallException
      */
     public function setVersioning(int $versioningMode,
@@ -405,7 +405,7 @@ class Indexer {
      * Overrides setting read form the `cfg::defaultCollectionClass` 
      * configuration property.
      * @param string $class
-     * @return \acdhOeaw\util\Indexer
+     * @return Indexer
      */
     public function setCollectionClass(string $class): Indexer {
         $this->collectionClass = $class;
@@ -418,7 +418,7 @@ class Indexer {
      * Overrides setting read form the `cfg::defaultBinaryClass` 
      * configuration property.
      * @param string $class
-     * @return \acdhOeaw\util\Indexer
+     * @return Indexer
      */
     public function setBinaryClass(string $class): Indexer {
         $this->binaryClass = $class;
@@ -438,7 +438,7 @@ class Indexer {
      * @param string $filter regular expression conformant with preg_replace()
      * @param int $type decides if $filter is a match or skip filter (can be
      *   one of Indexer::MATCH and Indexer::SKIP)
-     * @return \acdhOeaw\util\Indexer
+     * @return Indexer
      */
     public function setFilter(string $filter, int $type = self::MATCH): Indexer {
         switch ($type) {
@@ -460,7 +460,7 @@ class Indexer {
      * be created for each subdirectory (`$ifFlat` equals to `false`).
      * 
      * @param bool $ifFlat
-     * @return \acdhOeaw\util\Indexer
+     * @return Indexer
      */
     public function setFlatStructure(bool $ifFlat): Indexer {
         $this->flatStructure = $ifFlat;
@@ -476,7 +476,7 @@ class Indexer {
      * @param bool $limit maximum size in bytes; 0 will cause no files upload,
      *   special value of -1 (default) will cause all files to be uploaded no 
      *   matter their size
-     * @return \acdhOeaw\util\Indexer
+     * @return Indexer
      */
     public function setUploadSizeLimit(int $limit): Indexer {
         $this->uploadSizeLimit = $limit;
@@ -487,7 +487,7 @@ class Indexer {
      * Sets maximum indexing depth. 
      * 
      * @param int $depth maximum indexing depth (0 - only initial Resource dir, 1 - also its direct subdirectories, etc.)
-     * @return \acdhOeaw\util\Indexer
+     * @return Indexer
      */
     public function setDepth(int $depth): Indexer {
         $this->depth = $depth;
@@ -500,7 +500,7 @@ class Indexer {
      * Note this setting is skipped when the `$flatStructure` is set to `true`.
      * 
      * @param bool $include should resources be created for empty directories
-     * @return \acdhOeaw\util\Indexer
+     * @return Indexer
      * @see setFlatStructure()
      */
     public function setIncludeEmptyDirs(bool $include): Indexer {
@@ -533,7 +533,7 @@ class Indexer {
      * Sets a class providing metadata for indexed files.
      * @param MetaLookupInterface $metaLookup
      * @param bool $require should files lacking external metadata be skipped
-     * @return \acdhOeaw\util\Indexer
+     * @return Indexer
      */
     public function setMetaLookup(MetaLookupInterface $metaLookup,
                                   bool $require = false): Indexer {
