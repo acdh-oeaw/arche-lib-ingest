@@ -1,8 +1,8 @@
 # ACDH-repo-ingest
 
 [![Latest Stable Version](https://poser.pugx.org/acdh-oeaw/arche-lib-ingest/v/stable)](https://packagist.org/packages/acdh-oeaw/arche-lib-ingest)
-[![Build status](https://github.com/acdh-oeaw/arche-lib-ingest/workflows/phpunit/badge.svg)](https://github.com/acdh-oeaw/arche-lib-ingest/workflows/phpunit/badge.svg)
-[![Coverage Status](https://coveralls.io/repos/github/acdh-oeaw/arche-lib-ingest/badge.svg?branch=master)](https://coveralls.io/repos/github/acdh-oeaw/arche-lib-ingest/badge.svg?branch=master)
+![Build status](https://github.com/acdh-oeaw/arche-lib-ingest/workflows/phpunit/badge.svg)
+[![Coverage Status](https://coveralls.io/repos/github/acdh-oeaw/arche-lib-ingest/badge.svg?branch=master)](https://coveralls.io/github/acdh-oeaw/arche-lib-ingest?branch=master)
 [![License](https://poser.pugx.org/acdh-oeaw/arche-lib-ingest/license)](https://packagist.org/packages/acdh-oeaw/arche-lib-ingest)
 
 An library for ingesting data into the ACDH repository.
