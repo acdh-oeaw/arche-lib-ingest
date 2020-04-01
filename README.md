@@ -11,3 +11,13 @@ An library for ingesting data into the ACDH repository.
 
 `composer require acdh-oeaw/acdh-repo-ingest`
 
+
+## Documentation
+
+### API documentation
+
+https://acdh-oeaw.github.io/arche-docs/arche-lib-ingest/
+
+### Usage examples
+
+TODO
