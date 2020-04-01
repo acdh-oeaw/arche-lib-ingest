@@ -81,7 +81,7 @@ class IndexerTest extends TestBase {
         parent::setUp();
         $this->ind = new Indexer(__DIR__, self::URI_PREFIX);
         $this->ind->setDepth(1);
-        $this->ind->setParent(self::$res);
+        $this->ind->setParent(self::$res, true);
         $this->ind->setUploadSizeLimit(10000000);
         if (file_exists($this->tmpDir)) {
             system("rm -fR " . $this->tmpDir);

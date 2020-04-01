@@ -1,0 +1,49 @@
+name: phpunit
+
+on: push
+
+jobs:
+  phpunit:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: clone repo config
+      run: |
+        git clone --depth 1 --branch arche https://github.com/acdh-oeaw/arche-docker-config.git config
+        rm -f config/run.d/gui.sh config/run.d/oaipmh.sh config/run.d/resolver.sh
+        cp tests/config.yaml config/yaml/local.yaml
+    - name: run repo docker
+      run: |
+        mkdir log
+        docker run --name arche -p 80:80 -v `pwd`/log:/home/www-data/log -v `pwd`/config:/home/www-data/config -e USER_UID=`id -u` -e USER_GID=`id -g` -d acdhch/arche
+    - name: composer update
+      run: |
+        composer update
+    - name: fetch bigger data
+      run: |
+        curl https://zozlak.org/schnitzler-data.tgz > tests/data/schnitzler-data.tgz
+        cd tests/data
+        tar -xzf schnitzler-data.tgz
+        rm schnitzler-data.tgz
+        cd ../..
+    - name: wait
+      run: |
+        while [ "`grep '# INIT SCRIPTS ENDED' log/initScripts.log | wc -l`" != "1" ]; do
+          tail log/initScripts.log || true
+          echo "Waiting until repository is ready..."
+          echo "-----"
+          sleep 10
+        done
+        cat log/initScripts.log
+    - name: test
+      run: |
+        mkdir -p build/logs
+        cp config/initScripts/config.yaml tests/config.yaml
+        ./vendor/phpunit/phpunit/phpunit
+    - name: coveralls
+      run: |
+        export COVERALLS_RUN_LOCALLY=1
+        export COVERALLS_REPO_TOKEN=${{ secrets.coverallsToken }}
+        echo $COVERALLS_REPO_TOKEN
+        composer require php-coveralls/php-coveralls
+        php vendor/bin/php-coveralls -v

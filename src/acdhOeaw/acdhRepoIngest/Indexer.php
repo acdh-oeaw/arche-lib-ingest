@@ -314,20 +314,39 @@ class Indexer {
      * are set).
      * 
      * @param \acdhOeaw\acdhRepoLib\RepoResource $resource
+     * @param bool $strictLocations should locations (parent resource path within
+     *   a containerDir) be checked? (checked means at least one location must
+     *   be present and all locations must exist on a local storage)
      */
-    public function setParent(RepoResource $resource): Indexer {
+    public function setParent(RepoResource $resource,
+                              bool $strictLocations = false): Indexer {
         $this->parent = $resource;
         $this->repo   = $this->parent->getRepo();
         $this->readRepoConfig();
+        
         $metadata     = $this->parent->getMetadata();
         $locations    = $metadata->allLiterals($this->repo->getSchema()->ingest->location);
-        $this->paths  = [];
-        foreach ($locations as $i) {
-            $loc = preg_replace('|/$|', '', $this->containerDir . $i->getValue());
-            if (is_dir($loc)) {
-                $this->paths[] = $i->getValue();
+        if (count($locations) > 0) {
+            $missLoc      = [];
+            $this->paths = [];
+            foreach ($locations as $i) {
+                $loc = preg_replace('|/$|', '', $this->containerDir . (string) $i);
+                if (is_dir($loc)) {
+                    $this->paths[] = (string) $i;
+                } else {
+                    $missLoc = (string) $i;
+                }
             }
         }
+        if ($strictLocations) {
+            if (count($locations) === 0) {
+                throw new IndexerException('Resource has no location properties');
+            }
+            if (count($missLoc) > 0) {
+                throw new IndexerException('Some resource locations do not exist: ' . implode(', ', $missLoc));
+            }
+        }
+        
         return $this;
     }
 
@@ -456,14 +475,14 @@ class Indexer {
 
     /**
      * Sets if child resources be directly attached to the indexed RepoResource
-     * (`$ifFlat` equals to `true`) or a separate collection repository resource
-     * be created for each subdirectory (`$ifFlat` equals to `false`).
+     * (`$isFlat` equals to `true`) or a separate collection repository resource
+     * be created for each subdirectory (`$isFlat` equals to `false`).
      * 
-     * @param bool $ifFlat
+     * @param bool $isFlat
      * @return Indexer
      */
-    public function setFlatStructure(bool $ifFlat): Indexer {
-        $this->flatStructure = $ifFlat;
+    public function setFlatStructure(bool $isFlat): Indexer {
+        $this->flatStructure = $isFlat;
         return $this;
     }
 
@@ -646,7 +665,7 @@ class Indexer {
                 $ind->parent = $res;
             }
             $ind->setDepth($this->depth - 1);
-            $path              = self::getRelPath($i->getPathname(), $this->repo->getSchema()->ingest->containerDir);
+            $path              = self::getRelPath($i->getPathname(), $this->containerDir);
             $ind->setPaths([$path]);
             list($recRes, $recCom) = $ind->__index();
             $this->indexedRes  = array_merge($this->indexedRes, $recRes);
