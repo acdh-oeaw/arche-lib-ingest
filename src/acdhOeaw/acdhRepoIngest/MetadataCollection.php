@@ -235,7 +235,7 @@ class MetadataCollection extends Graph {
                 }
 
                 $repoResources[] = $repoRes;
-                $this->handleAutoCommit();
+                $this->handleAutoCommit($errorCount);
             } catch (ClientException $e) {
                 if ($errorMode === self::ERRMODE_PASS) {
                     $errorCount++;
@@ -475,8 +475,8 @@ class MetadataCollection extends Graph {
         }
     }
 
-    private function handleAutoCommit(): bool {
-        if ($this->autoCommit > 0) {
+    private function handleAutoCommit(int $errorCount): bool {
+        if ($this->autoCommit > 0 && $errorCount === 0) {
             $this->autoCommitCounter++;
             if ($this->autoCommitCounter >= $this->autoCommit) {
                 echo self::$debug ? "Autocommit\n" : '';
