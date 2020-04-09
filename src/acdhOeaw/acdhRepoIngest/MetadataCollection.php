@@ -27,6 +27,7 @@
 namespace acdhOeaw\acdhRepoIngest;
 
 use InvalidArgumentException;
+use GuzzleHttp\Exception\ClientException;
 use EasyRdf\Graph;
 use EasyRdf\Resource;
 use acdhOeaw\acdhRepoLib\Repo;
@@ -41,8 +42,10 @@ use acdhOeaw\UriNormalizer;
  */
 class MetadataCollection extends Graph {
 
-    const SKIP   = 1;
-    const CREATE = 2;
+    const SKIP         = 1;
+    const CREATE       = 2;
+    const ERRMODE_FAIL = 'fail';
+    const ERRMODE_PASS = 'pass';
 
     /**
      * Turns debug messages on
@@ -179,16 +182,26 @@ class MetadataCollection extends Graph {
      * @param int $singleOutNmsp should repository resources be created
      *   representing URIs outside $namespace (MetadataCollection::SKIP or
      *   MetadataCollection::CREATE)
+     * @param string $errorMode should single resource ingestion error break the
+     *   import? (MetadataCollection::ERRMODE_FAIL or 
+     *   MetadataCollection::ERRMODE_PASS) In the ERRMODE_PASS mode the first
+     *   encountered error turns off the autocomit and causes an error to be
+     *   thrown at the end of the import.
      * @return \acdhOeaw\acdhRepoLib\RepoResource[]
      * @throws InvalidArgumentException
      */
-    public function import(string $namespace, int $singleOutNmsp): array {
+    public function import(string $namespace, int $singleOutNmsp,
+                           string $errorMode = self::ERRMODE_FAIL): array {
         $idProp = $this->repo->getSchema()->id;
 
         $dict = [self::SKIP, self::CREATE];
         if (!in_array($singleOutNmsp, $dict)) {
             throw new InvalidArgumentException('singleOutNmsp parameters must be one of MetadataCollection::SKIP, MetadataCollection::CREATE');
         }
+        if (!in_array($errorMode, [self::ERRMODE_FAIL, self::ERRMODE_PASS])) {
+            throw new InvalidArgumentException('errorMode parameters must be one of MetadataCollection::ERRMODE_FAIL and MetadataCollection::ERRMODE_PASS');
+        }
+        $errorCount              = 0;
         $this->autoCommitCounter = 0;
 
         $this->removeLiteralIds();
@@ -207,21 +220,37 @@ class MetadataCollection extends Graph {
             $this->sanitizeResource($res);
 
             try {
-                $ids = array_map(function($x) {
-                    return (string) $x;
-                }, $res->allResources($idProp));
-                $repoRes = $this->repo->getResourceByIds($ids);
+                try {
+                    $ids = array_map(function($x) {
+                        return (string) $x;
+                    }, $res->allResources($idProp));
+                    $repoRes = $this->repo->getResourceByIds($ids);
 
-                echo self::$debug ? "\tupdating " . $repoRes->getUri() . "\n" : "";
-                $repoRes->setMetadata($res);
-                $repoRes->updateMetadata();
-            } catch (NotFound $ex) {
-                $repoRes = $this->repo->createResource($res);
-                echo self::$debug ? "\tcreated " . $repoRes->getUri() . "\n" : "";
+                    echo self::$debug ? "\tupdating " . $repoRes->getUri() . "\n" : "";
+                    $repoRes->setMetadata($res);
+                    $repoRes->updateMetadata();
+                } catch (NotFound $ex) {
+                    $repoRes = $this->repo->createResource($res);
+                    echo self::$debug ? "\tcreated " . $repoRes->getUri() . "\n" : "";
+                }
+
+                $repoResources[] = $repoRes;
+                $this->handleAutoCommit();
+            } catch (ClientException $e) {
+                if ($errorMode === self::ERRMODE_PASS) {
+                    $errorCount++;
+                    if (!self::$debug) {
+                        echo "$uri error: " . $e->getMessage() . "\n";
+                    } else {
+                        echo "\terror: " . $e->getMessage() . "\n";
+                    }
+                } else {
+                    throw $e;
+                }
             }
-
-            $repoResources[] = $repoRes;
-            $this->handleAutoCommit();
+        }
+        if ($errorCount > 0) {
+            throw new IndexerException('There was at least one error during the import');
         }
         return array_values($repoResources);
     }
