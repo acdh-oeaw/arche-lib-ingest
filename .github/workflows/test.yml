@@ -38,7 +38,6 @@ jobs:
     - name: test
       run: |
         mkdir -p build/logs
-        cp config/initScripts/config.yaml tests/config.yaml
         ./vendor/phpunit/phpunit/phpunit
     - name: coveralls
       run: |
