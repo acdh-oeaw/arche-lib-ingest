@@ -33,6 +33,7 @@ use EasyRdf\Resource;
 use acdhOeaw\acdhRepoLib\Repo;
 use acdhOeaw\acdhRepoLib\RepoResource;
 use acdhOeaw\acdhRepoLib\exception\NotFound;
+use acdhOeaw\acdhRepoLib\exception\AmbiguousMatch;
 use acdhOeaw\UriNormalizer;
 
 /**
@@ -219,6 +220,7 @@ class MetadataCollection extends Graph {
             echo self::$debug ? "Importing " . $uri . " (" . ($n + 1) . "/" . count($toBeImported) . ")\n" : "";
             $this->sanitizeResource($res);
 
+            $error = null;
             try {
                 try {
                     $ids = array_map(function($x) {
@@ -232,21 +234,24 @@ class MetadataCollection extends Graph {
                 } catch (NotFound $ex) {
                     $repoRes = $this->repo->createResource($res);
                     echo self::$debug ? "\tcreated " . $repoRes->getUri() . "\n" : "";
+                } catch (AmbiguousMatch $ex) {
+                    $error = $ex;
                 }
 
                 $repoResources[] = $repoRes;
                 $this->handleAutoCommit($errorCount);
-            } catch (ClientException $e) {
-                if ($errorMode === self::ERRMODE_PASS) {
-                    $errorCount++;
-                    if (!self::$debug) {
-                        echo "$uri error: " . $e->getMessage() . "\n";
-                    } else {
-                        echo "\terror: " . $e->getMessage() . "\n";
-                    }
+            } catch (ClientException $ex) {
+                $error = $ex;
+            }
+            if ($error !== null && $errorMode === self::ERRMODE_PASS) {
+                $errorCount++;
+                if (!self::$debug) {
+                    echo "$uri error " . get_class($error) . ": " . $error->getMessage() . "\n";
                 } else {
-                    throw $e;
+                    echo "\terror" . get_class($error) . ": " . $error->getMessage() . "\n";
                 }
+            } elseif ($error !== null) {
+                throw $error;
             }
         }
         if ($errorCount > 0) {
