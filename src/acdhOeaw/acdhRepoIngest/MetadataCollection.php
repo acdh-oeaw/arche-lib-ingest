@@ -248,7 +248,7 @@ class MetadataCollection extends Graph {
                 if (!self::$debug) {
                     echo "$uri error " . get_class($error) . ": " . $error->getMessage() . "\n";
                 } else {
-                    echo "\terror" . get_class($error) . ": " . $error->getMessage() . "\n";
+                    echo "\terror " . get_class($error) . ": " . $error->getMessage() . "\n";
                 }
             } elseif ($error !== null) {
                 throw $error;
