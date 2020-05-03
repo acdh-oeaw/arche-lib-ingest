@@ -173,5 +173,31 @@ class MetadataCollectionTest extends TestBase {
 
         $this->assertEquals(75, count($indRes));
     }
+    
+    /**
+     * @group metadataCollection
+     */
+    public function testImportSingleOutNmsp(): void {
+        $graph  = new MetadataCollection(self::$repo, __DIR__ . '/data/basicResources.ttl');
+        self::$repo->begin();
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('singleOutNmsp parameters must be one of MetadataCollection::SKIP, MetadataCollection::CREATE');
+        $indRes = $graph->import('https://id.acdh.oeaw.ac.at/', 99);
+        $this->noteResources($indRes);
+        self::$repo->commit();
+    }
+    
+    /**
+     * @group metadataCollection
+     */
+    public function testImportErrorMode(): void {
+        $graph  = new MetadataCollection(self::$repo, __DIR__ . '/data/basicResources.ttl');
+        self::$repo->begin();
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('errorMode parameters must be one of MetadataCollection::ERRMODE_FAIL and MetadataCollection::ERRMODE_PASS');
+        $indRes = $graph->import('https://id.acdh.oeaw.ac.at/', MetadataCollection::SKIP, 'none');
+        $this->noteResources($indRes);
+        self::$repo->commit();
+    }
 
 }
