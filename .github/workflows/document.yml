@@ -1,6 +1,9 @@
 name: document
 
-on: push
+on: 
+  push:
+    branches:
+    - master
 
 jobs:
   document:
