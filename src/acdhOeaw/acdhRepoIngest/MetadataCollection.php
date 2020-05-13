@@ -231,14 +231,15 @@ class MetadataCollection extends Graph {
                     echo self::$debug ? "\tupdating " . $repoRes->getUri() . "\n" : "";
                     $repoRes->setMetadata($res);
                     $repoRes->updateMetadata();
+                    $repoResources[] = $repoRes;
                 } catch (NotFound $ex) {
                     $repoRes = $this->repo->createResource($res);
                     echo self::$debug ? "\tcreated " . $repoRes->getUri() . "\n" : "";
+                    $repoResources[] = $repoRes;
                 } catch (AmbiguousMatch $ex) {
                     $error = $ex;
                 }
 
-                $repoResources[] = $repoRes;
                 $this->handleAutoCommit($errorCount);
             } catch (ClientException $ex) {
                 $error = $ex;
