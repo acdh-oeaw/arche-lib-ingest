@@ -24,6 +24,8 @@ rest:
 metadataManagment:
     nonRelationProperties:
         - https://vocabs.acdh.oeaw.ac.at/schema#hasPid
+    autoAddIds:
+        denyNamespaces: []
 metadataManager:
     fixed: []
     default: []
