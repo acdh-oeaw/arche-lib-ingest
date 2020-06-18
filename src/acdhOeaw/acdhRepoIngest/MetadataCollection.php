@@ -108,7 +108,7 @@ class MetadataCollection extends Graph {
         $this->parseFile($file, $format);
 
         $this->repo = $repo;
-        UriNormalizer::init((array) ($this->repo->getSchema()->uriNorm ?? []));
+        UriNormalizer::init();
     }
 
     /**

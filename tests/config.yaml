@@ -60,7 +60,6 @@ schema:
         location: https://vocabs.acdh.oeaw.ac.at/schema#hasLocationPath
         defaultBinaryClass: ''
         defaultCollectionClass: ''
-    uriNorm: []
 # client authorization config
 auth:
     httpHeader:

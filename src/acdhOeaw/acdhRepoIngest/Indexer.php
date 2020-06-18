@@ -798,7 +798,7 @@ class Indexer {
         $c                     = $this->repo->getSchema()->ingest;
         $this->binaryClass     = $c->defaultBinaryClass;
         $this->collectionClass = $c->defaultCollectionClass;
-        UriNormalizer::init((array) ($this->repo->getSchema()->uriNorm ?? []));
+        UriNormalizer::init();
     }
 
     private function getFileHash(string $path, string $hashName): string {
