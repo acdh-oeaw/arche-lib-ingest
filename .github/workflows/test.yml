@@ -12,6 +12,7 @@ jobs:
         git clone --depth 1 --branch arche https://github.com/acdh-oeaw/arche-docker-config.git config
         rm -f config/run.d/gui.sh config/run.d/oaipmh.sh config/run.d/resolver.sh
         cp tests/config.yaml config/yaml/local.yaml
+        cp .github/workflows/30-fixVocabularies.sh config/initScripts/
     - name: run repo docker
       run: |
         mkdir log
