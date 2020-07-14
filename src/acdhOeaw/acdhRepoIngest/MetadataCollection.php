@@ -79,10 +79,11 @@ class MetadataCollection extends Graph {
     private $resource;
 
     /**
-     * Fedora path in the repo where imported resources are created.
-     * @var string
+     * Should the title property be added automatically for ingested resources
+     * missing it.
+     * @var bool
      */
-    private $fedoraLoc = '/';
+    private $addTitle = false;
 
     /**
      * Number of resource automatically triggering a commit (0 - no auto commit)
@@ -125,21 +126,14 @@ class MetadataCollection extends Graph {
     }
 
     /**
-     * Sets a location where the resource will be placed.
+     * Sets if the title property should be automatically added for ingested
+     * resources which are missing it.
      * 
-     * Can be absolute (but will be sanitized anyway) or relative to the 
-     * repository root.
-     * 
-     * Given location must already exist.
-     * 
-     * Note that this parameter is used ONLY if the resource DOES NOT EXISTS.
-     * If it exists already, its location is not changed.
-     * 
-     * @param string $fedoraLoc fedora location 
-     * @return \acdhOeaw\util\MetadataCollection
+     * @param bool $add
+     * @return \acdhOeaw\acdhRepoIngest\MetadataCollection
      */
-    public function setFedoraLocation(string $fedoraLoc): MetadataCollection {
-        $this->fedoraLoc = $fedoraLoc;
+    public function setAddTitle(bool $add): MetadataCollection {
+        $this->addTitle = $add;
         return $this;
     }
 
@@ -233,7 +227,7 @@ class MetadataCollection extends Graph {
                     $repoRes->updateMetadata();
                     $repoResources[] = $repoRes;
                 } catch (NotFound $ex) {
-                    $repoRes = $this->repo->createResource($res);
+                    $repoRes         = $this->repo->createResource($res);
                     echo self::$debug ? "\tcreated " . $repoRes->getUri() . "\n" : "";
                     $repoResources[] = $repoRes;
                 } catch (AmbiguousMatch $ex) {
@@ -449,7 +443,7 @@ class MetadataCollection extends Graph {
             throw new InvalidArgumentException('resource contains references to blank nodes');
         }
 
-        if (count($res->allLiterals($titleProp)) == 0) {
+        if ($this->addTitle && count($res->allLiterals($titleProp)) === 0) {
             $res->addLiteral($titleProp, $res->getResource($idProp), 'en');
         }
 
