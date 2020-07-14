@@ -98,6 +98,12 @@ class MetadataCollection extends Graph {
     private $autoCommitCounter;
 
     /**
+     * Is the metadata graph preprocessed already?
+     * @var bool
+     */
+    private $preprocessed = false;
+
+    /**
      * Creates a new metadata parser.
      * 
      * @param Fedora $repo
@@ -154,6 +160,20 @@ class MetadataCollection extends Graph {
     }
 
     /**
+     * Performs preprocessing - removes literal IDs, promotes URIs to IDs, etc.
+     * 
+     * @return \acdhOeaw\acdhRepoIngest\MetadataCollection
+     */
+    public function preprocess(): MetadataCollection {
+        $this->removeLiteralIds();
+        $this->promoteUrisToIds();
+        $this->promoteBNodesToUris();
+        $this->fixReferences();
+        $this->preprocessed = true;
+        return $this;
+    }
+
+    /**
      * Imports the whole graph by looping over all resources.
      * 
      * A repository resource is created for every node containing at least one 
@@ -199,17 +219,14 @@ class MetadataCollection extends Graph {
         $errorCount              = 0;
         $this->autoCommitCounter = 0;
 
-        $this->removeLiteralIds();
-        $this->promoteUrisToIds();
-        $this->promoteBNodesToUris();
-        $this->fixReferences();
+        if (!$this->preprocessed) {
+            $this->preprocess();
+        }
         $toBeImported = $this->filterResources($namespace, $singleOutNmsp);
-        //$repoResources = $this->assureIds($toBeImported);
 
         $repoResources = [];
         foreach ($toBeImported as $n => $res) {
             $uri = $res->getUri();
-            //$repoRes = $repoResources[$uri];
 
             echo self::$debug ? "Importing " . $uri . " (" . ($n + 1) . "/" . count($toBeImported) . ")\n" : "";
             $this->sanitizeResource($res);
