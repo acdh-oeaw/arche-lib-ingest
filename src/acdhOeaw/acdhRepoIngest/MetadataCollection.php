@@ -284,6 +284,7 @@ class MetadataCollection extends Graph {
     private function filterResources(string $namespace, int $singleOutNmsp): array {
         $idProp = $this->repo->getSchema()->id;
         $result = [];
+        $t0 = time();
 
         echo self::$debug ? "Filtering resources...\n" : '';
         foreach ($this->resources() as $res) {
@@ -307,6 +308,12 @@ class MetadataCollection extends Graph {
             } else {
                 echo self::$debug ? "\t\tincluding\n" : '';
                 $result[] = $res;
+            }
+            
+            $t1 = time();
+            if ($t1 > $t0 && $this->repo->inTransaction()) {
+                $this->repo->prolong();
+                $t0 = $t1;
             }
         }
 
