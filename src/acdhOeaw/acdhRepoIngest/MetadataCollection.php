@@ -257,10 +257,14 @@ class MetadataCollection extends Graph {
             }
             if ($error !== null && $errorMode === self::ERRMODE_PASS) {
                 $errorCount++;
+                $msg = $error->getMessage();
+                if ($error instanceof ClientException && $error->getResponse() !== null) {
+                    $msg = (string) $error->getResponse()->getBody();
+                }
                 if (!self::$debug) {
-                    echo "$uri error " . get_class($error) . ": " . $error->getMessage() . "\n";
+                    echo "$uri error " . get_class($error) . ": " . $msg . "\n";
                 } else {
-                    echo "\terror " . get_class($error) . ": " . $error->getMessage() . "\n";
+                    echo "\terror " . get_class($error) . ": " . $msg . "\n";
                 }
             } elseif ($error !== null) {
                 throw $error;
@@ -284,7 +288,7 @@ class MetadataCollection extends Graph {
     private function filterResources(string $namespace, int $singleOutNmsp): array {
         $idProp = $this->repo->getSchema()->id;
         $result = [];
-        $t0 = time();
+        $t0     = time();
 
         echo self::$debug ? "Filtering resources...\n" : '';
         foreach ($this->resources() as $res) {
@@ -309,7 +313,7 @@ class MetadataCollection extends Graph {
                 echo self::$debug ? "\t\tincluding\n" : '';
                 $result[] = $res;
             }
-            
+
             $t1 = time();
             if ($t1 > $t0 && $this->repo->inTransaction()) {
                 $this->repo->prolong();
