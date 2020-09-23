@@ -221,8 +221,7 @@ abstract class SchemaObject {
      * Creates a new version of the resource. The new version inherits all IDs but
      * the UUID and epic PIDs. The old version looses all IDs but the UUID and
      * spic PIDs. It also looses all schema::parent property connections with collections.
-     * The old and the new resource are linked with `schema:versioning:isNewOf`
-     * and `schema:versioning.isOldOf`.
+     * The old and the new resource are linked with `schema.isNewVersionOf`
      * 
      * @param bool $uploadBinary should binary data of the real-world entity
      *   be uploaded uppon repository resource creation?
@@ -236,14 +235,13 @@ abstract class SchemaObject {
      */
     public function createNewVersion(bool $uploadBinary = true,
                                      bool $pidPass = false): RepoResource {
-        $pidProp       = $this->repo->getSchema()->ingest->pid;
-        $idProp        = $this->repo->getSchema()->id;
-        $relProp       = $this->repo->getSchema()->parent;
-        $repoIdNmsp    = $this->repo->getBaseUrl();
-        $vidNmsp       = $this->repo->getSchema()->namespaces->vid;
-        $isNewVerProp  = $this->repo->getSchema()->versioning->isNewOf;
-        $isPrevVerProp = $this->repo->getSchema()->versioning->isPrevOf;
-        $skipProp      = [$idProp];
+        $pidProp      = $this->repo->getSchema()->ingest->pid;
+        $idProp       = $this->repo->getSchema()->id;
+        $relProp      = $this->repo->getSchema()->parent;
+        $repoIdNmsp   = $this->repo->getBaseUrl();
+        $vidNmsp      = $this->repo->getSchema()->namespaces->vid;
+        $isNewVerProp = $this->repo->getSchema()->isNewVersionOf;
+        $skipProp     = [$idProp];
         if (!$pidPass) {
             $skipProp[] = $pidProp;
         }
@@ -277,12 +275,10 @@ abstract class SchemaObject {
         $oldRes->setMetadata($oldMeta);
         $oldRes->updateMetadata(RepoResource::UPDATE_OVERWRITE);
         $oldMeta = $oldRes->getMetadata();
-
-        $this->createResource($newMeta, $uploadBinary);
-
-        $oldMeta->addResource($isPrevVerProp, $this->res->getUri());
         $oldRes->setMetadata($oldMeta);
         $oldRes->updateMetadata();
+        
+        $this->createResource($newMeta, $uploadBinary);
 
         return $oldRes;
     }

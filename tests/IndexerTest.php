@@ -372,15 +372,11 @@ class IndexerTest extends TestBase {
         $meta        = $newRes->getMetadata();
         $this->assertEquals($pid, (string) $meta->getResource($pidProp)); // PID copied to the new resource - depends on the repo recognizing pid property as a non-relation one
         $this->assertTrue(in_array($pid, $newRes->getIds())); // depends on PID being copied to id (which is NOT the default repository setup cause the repository doesn't know the PID concept)
-        $prevResId = (string) $meta->getResource(self::$repo->getSchema()->versioning->isNewOf);
+        $prevResId = (string) $meta->getResource(self::$repo->getSchema()->isNewVersionOf);
         $this->assertTrue(!empty($prevResId));
         $prevRes     = self::$repo->getResourceById($prevResId);
         $prevMeta    = $prevRes->getMetadata(true);
         $this->assertNull($prevMeta->getResource($pidProp)); // PID not present in the old resource
-        $newResId  = (string) $prevMeta->getResource(self::$repo->getSchema()->versioning->isPrevOf);
-        $this->assertTrue(!empty($newResId));
-        $newRes2     = self::$repo->getResourceById($newResId);
-        $this->assertEquals($newRes2->getUri(), $newRes->getUri());
 
         file_put_contents(__DIR__ . '/data/sample.xml', random_int(0, 123456));
 
