@@ -29,6 +29,7 @@ namespace acdhOeaw\acdhRepoIngest;
 use InvalidArgumentException;
 use GuzzleHttp\Exception\ClientException;
 use EasyRdf\Graph;
+use EasyRdf\Literal;
 use EasyRdf\Resource;
 use acdhOeaw\acdhRepoLib\Repo;
 use acdhOeaw\acdhRepoLib\RepoResource;
