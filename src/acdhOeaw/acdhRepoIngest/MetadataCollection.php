@@ -117,10 +117,6 @@ class MetadataCollection extends Graph {
 
         $this->repo = $repo;
         UriNormalizer::init();
-
-        // to avoid problems with BC dates
-        Literal::deleteDatatypeMapping('xsd:date');
-        Literal::deleteDatatypeMapping('xsd:dateTime');
     }
 
     /**
