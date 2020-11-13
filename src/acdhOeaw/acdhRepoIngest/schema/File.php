@@ -33,6 +33,7 @@ use acdhOeaw\acdhRepoLib\Repo;
 use acdhOeaw\acdhRepoIngest\schema\SchemaObject;
 use acdhOeaw\acdhRepoIngest\metaLookup\MetaLookupInterface;
 use acdhOeaw\UriNormalizer;
+use zozlak\RdfConstants as RC;
 
 /**
  * Description of File
@@ -109,9 +110,11 @@ class File extends SchemaObject {
      * @see setMetaLookup()
      */
     public function getMetadata(): Resource {
-        $idProp    = $this->repo->getSchema()->id;
-        $relProp   = $this->repo->getSchema()->parent;
-        $titleProp = $this->repo->getSchema()->label;
+        $idProp       = $this->repo->getSchema()->id;
+        $relProp      = $this->repo->getSchema()->parent;
+        $titleProp    = $this->repo->getSchema()->label;
+        $filenameProp = $this->repo->getSchema()->fileName;
+        $mimeProp     = $this->repo->getSchema()->mime;
 
         $graph = new Graph();
         $meta  = $graph->resource('.');
@@ -119,7 +122,7 @@ class File extends SchemaObject {
         $meta->addResource($idProp, $this->getId());
 
         if ($this->class != '') {
-            $meta->addResource('http://www.w3.org/1999/02/22-rdf-syntax-ns#type', $this->class);
+            $meta->addResource(RC::RDF_TYPE, $this->class);
         }
 
         if ($this->parent) {
@@ -129,11 +132,11 @@ class File extends SchemaObject {
         $meta->addLiteral($this->repo->getSchema()->ingest->location, $this->location);
 
         $meta->addLiteral($titleProp, basename($this->path));
-        $meta->addLiteral('http://www.ebu.ch/metadata/ontologies/ebucore/ebucore#filename', basename($this->path));
+        $meta->addLiteral($filenameProp, basename($this->path));
         if (is_file($this->path)) {
             $mime = $this->getMime();
             if ($mime) {
-                $meta->addLiteral('http://www.ebu.ch/metadata/ontologies/ebucore/ebucore#hasMimeType', $mime);
+                $meta->addLiteral($mimeProp, $mime);
             }
             $meta->addLiteral($this->repo->getSchema()->binarySize, filesize($this->path));
         }
