@@ -4,3 +4,7 @@
 /build
 /tests/time.log
 /.phpdoc
+/.phpunit.result.cache
+/config
+/log
+/tests/data/schnitzler-data
