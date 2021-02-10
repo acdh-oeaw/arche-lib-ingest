@@ -132,8 +132,8 @@ class File extends SchemaObject {
         $meta->addLiteral($this->repo->getSchema()->ingest->location, $this->location);
 
         $meta->addLiteral($titleProp, basename($this->path));
-        $meta->addLiteral($filenameProp, basename($this->path));
         if (is_file($this->path)) {
+            $meta->addLiteral($filenameProp, basename($this->path));
             $mime = $this->getMime();
             if ($mime) {
                 $meta->addLiteral($mimeProp, $mime);
