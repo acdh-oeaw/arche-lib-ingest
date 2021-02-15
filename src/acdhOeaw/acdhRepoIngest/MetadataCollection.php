@@ -29,7 +29,6 @@ namespace acdhOeaw\acdhRepoIngest;
 use InvalidArgumentException;
 use GuzzleHttp\Exception\ClientException;
 use EasyRdf\Graph;
-use EasyRdf\Literal;
 use EasyRdf\Resource;
 use acdhOeaw\acdhRepoLib\Repo;
 use acdhOeaw\acdhRepoLib\RepoResource;
@@ -465,7 +464,10 @@ class MetadataCollection extends Graph {
             return $res;
         }
 
-        UriNormalizer::gNormalizeMeta($res, $idProp);
+        foreach ($res->propertyUris() as $prop) {
+            // because every triple object creates a repo resource and therefore ends up as an id
+            UriNormalizer::gNormalizeMeta($res, $prop);
+        }
 
         if ($this->containsWrongRefs($res)) {
             echo $res->copy()->getGraph()->serialise('ntriples') . "\n";
