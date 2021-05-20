@@ -24,12 +24,12 @@
  * THE SOFTWARE.
  */
 
-namespace acdhOeaw\acdhRepoIngest;
+namespace acdhOeaw\arche\lib\ingest\tests;
 
 use DateTime;
-use acdhOeaw\acdhRepoLib\Repo;
-use acdhOeaw\acdhRepoLib\exception\Deleted;
-use acdhOeaw\acdhRepoLib\exception\NotFound;
+use acdhOeaw\arche\lib\Repo;
+use acdhOeaw\arche\lib\exception\Deleted;
+use acdhOeaw\arche\lib\exception\NotFound;
 
 /**
  * Description of HelpersTrait
@@ -38,13 +38,9 @@ use acdhOeaw\acdhRepoLib\exception\NotFound;
  */
 abstract class TestBase extends \PHPUnit\Framework\TestCase {
 
-    /**
-     *
-     * @var \acdhOeaw\acdhRepoLib\Repo
-     */
-    static protected $repo;
-    static protected $config;
-    static private $n = 1;
+    static protected Repo $repo;
+    static protected object $config;
+    static private int $n = 1;
 
     static public function setUpBeforeClass(): void {
         $cfgFile      = __DIR__ . '/config.yaml';
@@ -56,8 +52,14 @@ abstract class TestBase extends \PHPUnit\Framework\TestCase {
         
     }
 
-    private $resources;
+    /**
+     * 
+     * @var array<RepoResource>
+     */
+    private array $resources;
 
+    private float $time = 0;
+    
     public function setUp(): void {
         $this->resources = [];
         $this->startTimer();
@@ -73,7 +75,6 @@ abstract class TestBase extends \PHPUnit\Framework\TestCase {
         $queue = [];
         foreach ($this->resources as $n => $i) {
             try {
-                /* @var $i \acdhOeaw\acdhRepoLib\RepoResource */
                 $queue[$n] = count($i->getGraph()->propertyUris());
             } catch (Deleted $e) {
                 
@@ -110,5 +111,4 @@ abstract class TestBase extends \PHPUnit\Framework\TestCase {
         $t = microtime(true) - $this->time;
         file_put_contents(__DIR__ . '/time.log', (new DateTime())->format('Y-m-d H:i:s.u') . "\t$t\t$msg\n", \FILE_APPEND);
     }
-
 }

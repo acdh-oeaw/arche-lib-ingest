@@ -24,20 +24,21 @@
  * THE SOFTWARE.
  */
 
-namespace acdhOeaw\acdhRepoIngest;
+namespace acdhOeaw\arche\lib\ingest;
 
 use BadMethodCallException;
 use InvalidArgumentException;
 use RuntimeException;
 use DateTime;
 use DirectoryIterator;
+use Throwable;
 use acdhOeaw\UriNormalizer;
-use acdhOeaw\acdhRepoLib\exception\NotFound;
-use acdhOeaw\acdhRepoLib\Repo;
-use acdhOeaw\acdhRepoLib\RepoResource;
-use acdhOeaw\acdhRepoIngest\metaLookup\MetaLookupInterface;
-use acdhOeaw\acdhRepoIngest\metaLookup\MetaLookupException;
-use acdhOeaw\acdhRepoIngest\schema\File;
+use acdhOeaw\arche\lib\exception\NotFound;
+use acdhOeaw\arche\lib\Repo;
+use acdhOeaw\arche\lib\RepoResource;
+use acdhOeaw\arche\lib\ingest\metaLookup\MetaLookupInterface;
+use acdhOeaw\arche\lib\ingest\metaLookup\MetaLookupException;
+use acdhOeaw\arche\lib\ingest\schema\File;
 
 /**
  * Ingests files into the repository
@@ -61,9 +62,8 @@ class Indexer {
 
     /**
      * Detected operating system path enconding.
-     * @var string
      */
-    static private $pathEncoding;
+    static private ?string $pathEncoding;
 
     /**
      * Extracts relative path from a full path (by skipping cfg:containerDir)
@@ -123,15 +123,13 @@ class Indexer {
 
     /**
      * Turns debug messages on
-     * @var bool
      */
-    static public $debug = false;
+    static public bool $debug = false;
 
     /**
      * RepoResource which children are created by the Indexer
-     * @var \acdhOeaw\acdhRepoLib\RepoResource
      */
-    private $parent;
+    private RepoResource $parent;
 
     /**
      * File system paths where resource children are located
@@ -142,29 +140,26 @@ class Indexer {
      * 
      * They can be also set manually using the `setPaths()` method
      * 
-     * @var array
+     * @var array<string>
      */
     private $paths = [''];
 
     /**
      * Regular expression for matching child resource file names.
-     * @var string 
      */
-    private $filter = '//';
+    private string $filter = '//';
 
     /**
      * Regular expression for excluding child resource file names.
-     * @var string 
      */
-    private $filterNot = '';
+    private string $filterNot = '';
 
     /**
      * Should children be directly attached to the RepoResource or maybe
      * each subdirectory should result in a separate collection resource
      * containing its children.
-     * @var bool
      */
-    private $flatStructure = false;
+    private bool $flatStructure = false;
 
     /**
      * Maximum size of a child resource (in bytes) resulting in the creation
@@ -174,101 +169,81 @@ class Indexer {
      * will be created.
      * 
      * Special value of -1 means "import all no matter their size"
-     * 
-     * @var int
      */
-    private $uploadSizeLimit = -1;
+    private int $uploadSizeLimit = -1;
 
     /**
      * URI of an RDF class assigned to indexed collections.
-     * @var string
      */
-    private $collectionClass;
+    private ?string $collectionClass = null;
 
     /**
      * URI of an RDF class assigned to indexed binary resources.
-     * @var type 
      */
-    private $binaryClass;
+    private ?string $binaryClass = null;
 
     /**
      * How many subsequent subdirectories should be indexed.
-     * 
-     * @var int 
      */
-    private $depth = 1000;
+    private int $depth = 1000;
 
     /**
      * Number of resource automatically triggering a commit (0 - no auto commit)
-     * @var int
      */
-    private $autoCommit = 0;
+    private int $autoCommit = 0;
 
     /**
      * Base ingestion path to be substituted with the $containerToUriPrefix
      * to form a binary id.
-     * 
-     * @var string
      */
-    private $containerDir;
+    private ?string $containerDir = null;
 
     /**
      * Namespaces to substitute the $containerDir in the ingested binary path
      * to form a binary id.
-     * 
-     * @var string
      */
-    private $containerToUriPrefix;
+    private ?string $containerToUriPrefix = null;
 
     /**
      * Should resources be created for empty directories.
      * 
      * Skipped if `$flatStructure` equals to `true`
-     * 
-     * @var bool 
      */
-    private $includeEmpty = false;
+    private bool $includeEmpty = false;
 
     /**
      * Should files (not)existing in the Fedora be skipped?
      * @see setSkip()
-     * @var int
      */
-    private $skipMode = self::SKIP_NONE;
+    private int $skipMode = self::SKIP_NONE;
 
     /**
      * Should new versions of binary resources already existing in the Fedora
      * be created (if not, an existing resource is simply overwritten).
-     * 
-     * @var int
      */
-    private $versioningMode = self::VERSIONING_NONE;
+    private int $versioningMode = self::VERSIONING_NONE;
 
     /**
      * Should PIDs (epic handles) be migrated to the new version of a resource
      * during versioning.
-     * @var int
      */
-    private $pidPass = self::PID_KEEP;
+    private int $pidPass = self::PID_KEEP;
 
     /**
      * An object providing metadata when given a resource file path
-     * @var \acdhOeaw\util\metaLookup\MetaLookupInterface
      */
-    private $metaLookup;
+    private MetaLookupInterface $metaLookup;
 
     /**
      * Should files without external metadata (provided by the `$metaLookup`
      * object) be skipped.
-     * @var bool
      */
-    private $metaLookupRequire = false;
+    private bool $metaLookupRequire = false;
 
     /**
      * Repository connection
-     * @var \acdhOeaw\acdhRepoLib\Repo
      */
-    private $repo;
+    private Repo $repo;
 
     /**
      * Collection of resources commited during the ingestion. Used to handle
@@ -276,14 +251,14 @@ class Indexer {
      * @var array
      * @see index()
      */
-    private $commitedRes;
+    private array $commitedRes;
 
     /**
      * Collection of indexed resources
      * @var array
      * @see index()
      */
-    private $indexedRes;
+    private array $indexedRes;
 
     /**
      * 
@@ -298,7 +273,7 @@ class Indexer {
 
     /**
      * Sets the repository connection object
-     * @param \acdhOeaw\acdhRepoLib\Repo
+     * @param Repo
      */
     public function setRepo(Repo $repo): Indexer {
         $this->repo = $repo;
@@ -313,7 +288,7 @@ class Indexer {
      * cfg.schema.ingest.location RDF property values (only existing directories
      * are set).
      * 
-     * @param \acdhOeaw\acdhRepoLib\RepoResource $resource
+     * @param RepoResource $resource
      * @param bool $strictLocations should locations (parent resource path within
      *   a containerDir) be checked? (checked means at least one location must
      *   be present and all locations must exist on a local storage)
@@ -323,11 +298,11 @@ class Indexer {
         $this->parent = $resource;
         $this->repo   = $this->parent->getRepo();
         $this->readRepoConfig();
-        
-        $metadata     = $this->parent->getMetadata();
-        $locations    = $metadata->allLiterals($this->repo->getSchema()->ingest->location);
+
+        $metadata  = $this->parent->getMetadata();
+        $locations = $metadata->allLiterals($this->repo->getSchema()->ingest->location);
+        $missLoc   = [];
         if (count($locations) > 0) {
-            $missLoc      = [];
             $this->paths = [];
             foreach ($locations as $i) {
                 $loc = preg_replace('|/$|', '', $this->containerDir . (string) $i);
@@ -346,7 +321,7 @@ class Indexer {
                 throw new IndexerException('Some resource locations do not exist: ' . implode(', ', $missLoc));
             }
         }
-        
+
         return $this;
     }
 
@@ -614,6 +589,7 @@ class Indexer {
         }
 
         echo self::$debug ? $i->getPathname() . "\n" : "";
+        $file = $res  = null;
 
         $skip   = $this->isSkipped($i);
         $upload = $i->isFile() && ($this->uploadSizeLimit > $i->getSize() || $this->uploadSizeLimit === -1);
@@ -746,7 +722,7 @@ class Indexer {
      * @param File $file
      * @param string $parent
      * @param bool $upload
-     * @return \acdhOeaw\acdhRepoLib\RepoResource
+     * @return RepoResource
      */
     public function performUpdate(DirectoryIterator $iter, File $file,
                                   bool $upload): RepoResource {
@@ -806,5 +782,4 @@ class Indexer {
         hash_update_file($hash, $path);
         return hash_final($hash, false);
     }
-
 }

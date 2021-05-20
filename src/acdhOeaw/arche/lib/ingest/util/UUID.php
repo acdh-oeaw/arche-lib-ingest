@@ -3,7 +3,7 @@
 /*
  * The MIT License
  *
- * Copyright 2019 Austrian Centre for Digital Humanities.
+ * Copyright 2016 Austrian Centre for Digital Humanities.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -24,37 +24,29 @@
  * THE SOFTWARE.
  */
 
-namespace acdhOeaw\acdhRepoIngest\metaLookup;
-
-use EasyRdf\Resource;
+namespace acdhOeaw\arche\lib\ingest\util;
 
 /**
- * Simply adds same fixed set of metadata properties to every file.
- * Particularly useful for testing.
+ * Generates UUIDs 
+ * (see https://en.wikipedia.org/wiki/Universally_unique_identifier)
  *
  * @author zozlak
  */
-class MetaLookupConstant implements MetaLookupInterface {
-    
-    private $metadata;
-    
-    public function __construct(Resource $res) {
-        $this->metadata = $res;
-    }
-    
+class UUID {
+
     /**
-     * Searches for metadata of a given file.
-     * @param string $path path to the file (just for conformance with
-     *   the interface, it is not used)
-     * @param \EasyRdf\Resource $meta file's metadata 
-     * @param bool $require should error be thrown when no metadata was found
-     *   (not used, this class always return metadata)
-     * @return \EasyRdf\Resource fetched metadata
-     * @throws MetaLookupException
+     * Generates a v4 (random) UUID
+     * @return string
      */
-    public function getMetadata(string $path, \EasyRdf\Resource $meta,
-                                bool $require = false): \EasyRdf\Resource {
-        return $this->metadata;
+    static public function v4(): string {
+        $n = [];
+        for ($i = 0; $i < 8; $i++) {
+            $n[$i] = mt_rand(0, 0xffff);
+        }
+        $n[3] = $n[3] | 0x4000;
+        $n[4] = $n[4] | 0x8000;
+        $format = '%04x%04x-%04x-%04x-%04x-%04x%04x%04x';
+        return sprintf($format, $n[0], $n[1], $n[2], $n[3], $n[4], $n[5], $n[6], $n[7]);
     }
 
 }

@@ -24,7 +24,7 @@
  * THE SOFTWARE.
  */
 
-namespace acdhOeaw\acdhRepoIngest\metaLookup;
+namespace acdhOeaw\arche\lib\ingest\metaLookup;
 
 use InvalidArgumentException;
 use EasyRdf\Resource;

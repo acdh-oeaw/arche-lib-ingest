@@ -3,7 +3,7 @@
 /*
  * The MIT License
  *
- * Copyright 2016 Austrian Centre for Digital Humanities.
+ * Copyright 2019 Austrian Centre for Digital Humanities.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -24,29 +24,17 @@
  * THE SOFTWARE.
  */
 
-namespace acdhOeaw\acdhRepoIngest\util;
+
+namespace acdhOeaw\arche\lib\ingest\metaLookup;
+
+use Exception;
 
 /**
- * Generates UUIDs 
- * (see https://en.wikipedia.org/wiki/Universally_unique_identifier)
+ * Exception thrown when a resource metadata were not found in the external
+ * source.
  *
  * @author zozlak
  */
-class UUID {
-
-    /**
-     * Generates a v4 (random) UUID
-     * @return string
-     */
-    static public function v4(): string {
-        $n = [];
-        for ($i = 0; $i < 8; $i++) {
-            $n[$i] = mt_rand(0, 0xffff);
-        }
-        $n[3] = $n[3] | 0x4000;
-        $n[4] = $n[4] | 0x8000;
-        $format = '%04x%04x-%04x-%04x-%04x-%04x%04x%04x';
-        return sprintf($format, $n[0], $n[1], $n[2], $n[3], $n[4], $n[5], $n[6], $n[7]);
-    }
-
+class MetaLookupException extends Exception {
+    
 }

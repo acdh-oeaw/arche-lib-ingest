@@ -24,16 +24,16 @@
  * THE SOFTWARE.
  */
 
-namespace acdhOeaw\acdhRepoIngest;
+namespace acdhOeaw\arche\lib\ingest;
 
 use InvalidArgumentException;
 use GuzzleHttp\Exception\ClientException;
 use EasyRdf\Graph;
 use EasyRdf\Resource;
-use acdhOeaw\acdhRepoLib\Repo;
-use acdhOeaw\acdhRepoLib\RepoResource;
-use acdhOeaw\acdhRepoLib\exception\NotFound;
-use acdhOeaw\acdhRepoLib\exception\AmbiguousMatch;
+use acdhOeaw\arche\lib\Repo;
+use acdhOeaw\arche\lib\RepoResource;
+use acdhOeaw\arche\lib\exception\NotFound;
+use acdhOeaw\arche\lib\exception\AmbiguousMatch;
 use acdhOeaw\UriNormalizer;
 
 /**
@@ -50,9 +50,8 @@ class MetadataCollection extends Graph {
 
     /**
      * Turns debug messages on
-     * @var bool
      */
-    static public $debug = false;
+    static public bool $debug = false;
 
     /**
      * Makes given resource a proper agent
@@ -68,40 +67,34 @@ class MetadataCollection extends Graph {
 
     /**
      * Repository connection object
-     * @var \acdhOeaw\acdhRepoLib\Repo
      */
-    private $repo;
+    private Repo $repo;
 
     /**
      * Parent resource for all imported graph nodes
-     * @var \acdhOeaw\acdhRepoLib\RepoResource
      */
-    private $resource;
+    private RepoResource $resource;
 
     /**
      * Should the title property be added automatically for ingested resources
      * missing it.
-     * @var bool
      */
-    private $addTitle = false;
+    private bool $addTitle = false;
 
     /**
      * Number of resource automatically triggering a commit (0 - no auto commit)
-     * @var int
      */
-    private $autoCommit = 0;
+    private int $autoCommit = 0;
 
     /**
      * Used to determine when the autocommit should tak place
-     * @var int
      */
-    private $autoCommitCounter;
+    private int $autoCommitCounter = 0;
 
     /**
      * Is the metadata graph preprocessed already?
-     * @var bool
      */
-    private $preprocessed = false;
+    private bool $preprocessed = false;
 
     /**
      * Creates a new metadata parser.
@@ -122,8 +115,8 @@ class MetadataCollection extends Graph {
      * Sets the repository resource being parent of all resources in the
      * graph imported by the import() method.
      * 
-     * @param \acdhOeaw\acdhRepoLib\RepoResource $res
-     * @return \acdhOeaw\util\MetadataCollection
+     * @param RepoResource $res
+     * @return MetadataCollection
      * @see import()
      */
     public function setResource(RepoResource $res): MetadataCollection {
@@ -136,7 +129,7 @@ class MetadataCollection extends Graph {
      * resources which are missing it.
      * 
      * @param bool $add
-     * @return \acdhOeaw\acdhRepoIngest\MetadataCollection
+     * @return MetadataCollection
      */
     public function setAddTitle(bool $add): MetadataCollection {
         $this->addTitle = $add;
@@ -152,7 +145,7 @@ class MetadataCollection extends Graph {
      * don't want to do that for performance reasons).
      * @param int $count number of resource automatically triggering a commit 
      *   (0 - no auto commit)
-     * @return \acdhOeaw\util\MetadataCollection
+     * @return MetadataCollection
      */
     public function setAutoCommit(int $count): MetadataCollection {
         $this->autoCommit = $count;
@@ -162,7 +155,7 @@ class MetadataCollection extends Graph {
     /**
      * Performs preprocessing - removes literal IDs, promotes URIs to IDs, etc.
      * 
-     * @return \acdhOeaw\acdhRepoIngest\MetadataCollection
+     * @return MetadataCollection
      */
     public function preprocess(): MetadataCollection {
         $this->removeLiteralIds();
@@ -202,7 +195,7 @@ class MetadataCollection extends Graph {
      *   MetadataCollection::ERRMODE_PASS) In the ERRMODE_PASS mode the first
      *   encountered error turns off the autocomit and causes an error to be
      *   thrown at the end of the import.
-     * @return \acdhOeaw\acdhRepoLib\RepoResource[]
+     * @return array<RepoResource>
      * @throws InvalidArgumentException
      */
     public function import(string $namespace, int $singleOutNmsp,
@@ -283,7 +276,7 @@ class MetadataCollection extends Graph {
      * @param int $singleOutNmsp should repository resources be created
      *   representing URIs outside $namespace (MetadataCollection::SKIP or
      *   MetadataCollection::CREATE)
-     * @return \acdhOeaw\acdhRepoLib\RepoResource[]
+     * @return array<RepoResource>
      */
     private function filterResources(string $namespace, int $singleOutNmsp): array {
         $idProp = $this->repo->getSchema()->id;

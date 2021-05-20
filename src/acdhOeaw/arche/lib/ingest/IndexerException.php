@@ -24,17 +24,46 @@
  * THE SOFTWARE.
  */
 
-
-namespace acdhOeaw\acdhRepoIngest\metaLookup;
+namespace acdhOeaw\arche\lib\ingest;
 
 use Exception;
+use Throwable;
 
 /**
- * Exception thrown when a resource metadata were not found in the external
- * source.
+ * Exception used by the Indexer class, giving access to resources which were
+ * commited when an error occured.
  *
  * @author zozlak
  */
-class MetaLookupException extends Exception {
-    
+class IndexerException extends Exception {
+
+    /**
+     * A collection of already processed resources
+     * @var array
+     */
+    private $resources = [];
+
+    /**
+     * Creates the exception
+     * @param string $message exception message
+     * @param int $code exception code
+     * @param Throwable $previous original exception
+     * @param array $resources collection of already commited resources
+     */
+    public function __construct(string $message = "", int $code = 0,
+                                Throwable $previous = null,
+                                array $resources = []) {
+        parent::__construct($message, $code, $previous);
+        $this->resources = $resources;
+    }
+
+    /**
+     * Returns the collection of resources which were already processed when
+     * an error occured.
+     * @return array
+     */
+    public function getCommitedResources(): array {
+        return $this->resources;
+    }
+
 }

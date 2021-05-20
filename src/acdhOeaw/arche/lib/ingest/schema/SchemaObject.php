@@ -24,14 +24,14 @@
  * THE SOFTWARE.
  */
 
-namespace acdhOeaw\acdhRepoIngest\schema;
+namespace acdhOeaw\arche\lib\ingest\schema;
 
 use EasyRdf\Resource;
-use acdhOeaw\acdhRepoLib\BinaryPayload;
-use acdhOeaw\acdhRepoLib\Repo;
-use acdhOeaw\acdhRepoLib\RepoResource;
-use acdhOeaw\acdhRepoLib\exception\NotFound;
-use acdhOeaw\acdhRepoIngest\util\UUID;
+use acdhOeaw\arche\lib\BinaryPayload;
+use acdhOeaw\arche\lib\Repo;
+use acdhOeaw\arche\lib\RepoResource;
+use acdhOeaw\arche\lib\exception\NotFound;
+use acdhOeaw\arche\lib\ingest\util\UUID;
 use acdhOeaw\UriNormalizer;
 
 /**
@@ -44,54 +44,48 @@ abstract class SchemaObject {
 
     /**
      * Debug mode switch.
-     * @var boolean 
      */
-    static public $debug = false;
+    static public bool $debug = false;
 
     /**
      * Repository resource representing given entity.
-     * @var \acdhOeaw\acdhRepoLib\RepoResource
      */
-    private $res;
+    private RepoResource $res;
 
     /**
      * Entity id.
-     * @var string
      */
-    private $id;
+    private string $id;
 
     /**
      * External metadata to be merged with automatically generated one.
-     * @var \EasyRdf\Resource
      */
-    private $metadata;
+    private \EasyRdf\Resource $metadata;
 
     /**
      * List of automaticaly generated metadata properties to be preserved while
      * merging with external metadata.
-     * @var string[]
+     * @var array<string>
      */
-    private $metadataPreserve = [];
+    private array $metadataPreserve = [];
 
     /**
      * Allows to keep track of the corresponding repository resource state:
      * - null - unknown
      * - true - recent call to updateRms() created the repository resource
      * - false - repository resource already existed uppon last updateRms() call
-     * @var bool
      */
-    protected $created;
+    protected ?bool $created = null;
 
     /**
      * repository connection object.
-     * @var \acdhOeaw\acdhRepoLib\Repo
      */
-    protected $repo;
+    protected Repo $repo;
 
     /**
      * Creates an object representing a real-world entity.
      * 
-     * @param \acdhOeaw\acdhRepoLib\Repo $repo repository connection object
+     * @param Repo $repo repository connection object
      * @param string $id entity identifier (derived class-specific)
      */
     public function __construct(Repo $repo, string $id) {
@@ -113,7 +107,7 @@ abstract class SchemaObject {
      *   exist?
      * @param bool $uploadBinary should binary data of the real-world entity
      *   be uploaded uppon repository resource creation?
-     * @return \acdhOeaw\acdhRepoLib\RepoResource
+     * @return RepoResource
      */
     public function getResource(bool $create = true, bool $uploadBinary = true): RepoResource {
         if ($this->res === null) {
@@ -161,7 +155,7 @@ abstract class SchemaObject {
      *   exist?
      * @param bool $uploadBinary should binary data of the real-world entity
      *   be uploaded uppon repository resource creation?
-     * @return \acdhOeaw\acdhRepoLib\RepoResource
+     * @return RepoResource
      */
     public function updateRms(bool $create = true, bool $uploadBinary = true): RepoResource {
         $this->created = $this->findResource($create, $uploadBinary);
@@ -212,7 +206,7 @@ abstract class SchemaObject {
      * @param Resource $meta external metadata
      * @param array $preserve list of metadata properties to be kept - see above
      */
-    public function setMetadata(Resource $meta, array $preserve = []) {
+    public function setMetadata(Resource $meta, array $preserve = []): void {
         $this->metadata         = $meta;
         $this->metadataPreserve = $preserve;
     }
@@ -231,7 +225,7 @@ abstract class SchemaObject {
      *   to exist (you can not create "/foo/bar" if "/foo" does not exist already).
      * @param bool $pidPass should PIDs (epic handles) be migrated to the new
      *   version (`true`) or kept by the old one (`false`)
-     * @return \acdhOeaw\acdhRepoLib\RepoResource old version resource
+     * @return RepoResource old version resource
      */
     public function createNewVersion(bool $uploadBinary = true,
                                      bool $pidPass = false): RepoResource {
@@ -277,7 +271,7 @@ abstract class SchemaObject {
         $oldMeta = $oldRes->getMetadata();
         $oldRes->setMetadata($oldMeta);
         $oldRes->updateMetadata();
-        
+
         $this->createResource($newMeta, $uploadBinary);
 
         return $oldRes;
@@ -329,7 +323,7 @@ abstract class SchemaObject {
 
     /**
      * Provides entity binary data.
-     * @return value accepted as the \acdhOeaw\acdhRepoLib\Repo::attachData() $body parameter
+     * @return ?BinaryPayload
      */
     protected function getBinaryData(): ?BinaryPayload {
         return null;
@@ -347,5 +341,4 @@ abstract class SchemaObject {
         UriNormalizer::gNormalizeMeta($meta, $idProp);
         return $meta;
     }
-
 }

@@ -24,14 +24,14 @@
  * THE SOFTWARE.
  */
 
-namespace acdhOeaw\acdhRepoIngest\schema;
+namespace acdhOeaw\arche\lib\ingest\schema;
 
 use EasyRdf\Graph;
 use EasyRdf\Resource;
-use acdhOeaw\acdhRepoLib\BinaryPayload;
-use acdhOeaw\acdhRepoLib\Repo;
-use acdhOeaw\acdhRepoIngest\schema\SchemaObject;
-use acdhOeaw\acdhRepoIngest\metaLookup\MetaLookupInterface;
+use acdhOeaw\arche\lib\BinaryPayload;
+use acdhOeaw\arche\lib\Repo;
+use acdhOeaw\arche\lib\ingest\schema\SchemaObject;
+use acdhOeaw\arche\lib\ingest\metaLookup\MetaLookupInterface;
 use acdhOeaw\UriNormalizer;
 use zozlak\RdfConstants as RC;
 
@@ -223,5 +223,4 @@ class File extends SchemaObject {
 
         return $meta;
     }
-
 }

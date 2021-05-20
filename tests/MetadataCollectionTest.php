@@ -24,7 +24,9 @@
  * THE SOFTWARE.
  */
 
-namespace acdhOeaw\acdhRepoIngest;
+namespace acdhOeaw\arche\lib\ingest\tests;
+
+use acdhOeaw\arche\lib\ingest\MetadataCollection;
 
 /**
  * Description of MetadataCollectionTest
@@ -149,7 +151,7 @@ class MetadataCollectionTest extends TestBase {
         $acdhMeta = $acdh->getMetadata();
         $this->assertEquals(1010, (int) $acdhMeta->getLiteral('https://vocabs.acdh.oeaw.ac.at/schema#hasPostcode')->getValue());
         $this->assertEquals('Austrian Centre for Digital Humanities and Cultural Heritage', (string) $acdhMeta->getLiteral('https://vocabs.acdh.oeaw.ac.at/schema#hasTitle'));
-        
+
         // repeat to make sure there are no issues with resource duplication, etc.
         $graph  = new MetadataCollection(self::$repo, __DIR__ . '/data/basicResources.ttl');
         self::$repo->begin();
@@ -173,7 +175,7 @@ class MetadataCollectionTest extends TestBase {
 
         $this->assertEquals(75, count($indRes));
     }
-    
+
     /**
      * @group metadataCollection
      */
@@ -186,7 +188,7 @@ class MetadataCollectionTest extends TestBase {
         $this->noteResources($indRes);
         self::$repo->commit();
     }
-    
+
     /**
      * @group metadataCollection
      */
@@ -199,5 +201,4 @@ class MetadataCollectionTest extends TestBase {
         $this->noteResources($indRes);
         self::$repo->commit();
     }
-
 }

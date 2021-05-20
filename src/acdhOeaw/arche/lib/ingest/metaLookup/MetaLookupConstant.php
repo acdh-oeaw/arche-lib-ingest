@@ -24,27 +24,37 @@
  * THE SOFTWARE.
  */
 
-namespace acdhOeaw\acdhRepoIngest\metaLookup;
+namespace acdhOeaw\arche\lib\ingest\metaLookup;
 
 use EasyRdf\Resource;
 
 /**
- * It is a common problem to couple binary data with their metadata.
- * 
- * This interface provides a method for returning metadata object based on the
- * binary file path.
+ * Simply adds same fixed set of metadata properties to every file.
+ * Particularly useful for testing.
+ *
  * @author zozlak
  */
-interface MetaLookupInterface {
-
+class MetaLookupConstant implements MetaLookupInterface {
+    
+    private $metadata;
+    
+    public function __construct(Resource $res) {
+        $this->metadata = $res;
+    }
+    
     /**
-     * Returns metadata coupled with a file.
-     * @param string $path path to the data file
-     * @param \EasyRdf\Resource meta existing data file metadata
+     * Searches for metadata of a given file.
+     * @param string $path path to the file (just for conformance with
+     *   the interface, it is not used)
+     * @param \EasyRdf\Resource $meta file's metadata 
      * @param bool $require should error be thrown when no metadata was found
-     *   (when false a resource with no triples is returned)
+     *   (not used, this class always return metadata)
      * @return \EasyRdf\Resource fetched metadata
+     * @throws MetaLookupException
      */
-    public function getMetadata(string $path, Resource $meta,
-                                bool $require = false): Resource;
+    public function getMetadata(string $path, \EasyRdf\Resource $meta,
+                                bool $require = false): \EasyRdf\Resource {
+        return $this->metadata;
+    }
+
 }

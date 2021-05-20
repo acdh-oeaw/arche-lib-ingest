@@ -24,12 +24,13 @@
  * THE SOFTWARE.
  */
 
-namespace acdhOeaw\acdhRepoIngest;
+namespace acdhOeaw\arche\lib\ingest\tests;
 
 use EasyRdf\Graph;
-use acdhOeaw\acdhRepoIngest\metaLookup\MetaLookupFile;
-use acdhOeaw\acdhRepoIngest\metaLookup\MetaLookupGraph;
-use acdhOeaw\acdhRepoLib\exception\NotFound;
+use acdhOeaw\arche\lib\exception\NotFound;
+use acdhOeaw\arche\lib\ingest\Indexer;
+use acdhOeaw\arche\lib\ingest\metaLookup\MetaLookupFile;
+use acdhOeaw\arche\lib\ingest\metaLookup\MetaLookupGraph;
 
 /**
  * Description of IndexerTest
