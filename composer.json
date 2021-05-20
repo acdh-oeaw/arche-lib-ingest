@@ -29,7 +29,7 @@
     },
     "autoload-dev": {
         "psr-4": {
-            "acdhOeaw\\acdhRepoIngest\\tests\\": "tests"
+            "acdhOeaw\\arche\\lib\\ingest\\tests\\": "tests"
         }
     }
 }

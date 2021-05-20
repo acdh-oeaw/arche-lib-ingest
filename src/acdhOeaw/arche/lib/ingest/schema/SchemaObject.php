@@ -50,7 +50,7 @@ abstract class SchemaObject {
     /**
      * Repository resource representing given entity.
      */
-    private RepoResource $res;
+    private ?RepoResource $res = null;
 
     /**
      * Entity id.
@@ -60,7 +60,7 @@ abstract class SchemaObject {
     /**
      * External metadata to be merged with automatically generated one.
      */
-    private \EasyRdf\Resource $metadata;
+    private ?\EasyRdf\Resource $metadata = null;
 
     /**
      * List of automaticaly generated metadata properties to be preserved while

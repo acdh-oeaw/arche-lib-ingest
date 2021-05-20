@@ -12,12 +12,12 @@ rest:
             get: []
             create:
                 - type: function
-                  function: \acdhOeaw\acdhRepo\handler\MetadataManager::manage
+                  function: \acdhOeaw\arche\core\handler\MetadataManager::manage
             delete: []
             updateBinary: []
             updateMetadata:
                 - type: function
-                  function: \acdhOeaw\acdhRepo\handler\MetadataManager::manage
+                  function: \acdhOeaw\arche\core\handler\MetadataManager::manage
             txBegin: []
             txCommit: []
             txRollback: []
@@ -39,6 +39,7 @@ schema:
     delete: delete://delete
     searchMatch: search://match
     searchFts: search://fts
+    searchCount: search://count
     binarySize: https://vocabs.acdh.oeaw.ac.at/schema#hasBinarySize
     fileName: http://www.ebu.ch/metadata/ontologies/ebucore/ebucore#filename
     mime: https://vocabs.acdh.oeaw.ac.at/schema#hasFormat

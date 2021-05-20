@@ -73,7 +73,7 @@ class MetadataCollection extends Graph {
     /**
      * Parent resource for all imported graph nodes
      */
-    private RepoResource $resource;
+    private ?RepoResource $resource = null;
 
     /**
      * Should the title property be added automatically for ingested resources
@@ -115,11 +115,11 @@ class MetadataCollection extends Graph {
      * Sets the repository resource being parent of all resources in the
      * graph imported by the import() method.
      * 
-     * @param RepoResource $res
+     * @param ?RepoResource $res
      * @return MetadataCollection
      * @see import()
      */
-    public function setResource(RepoResource $res): MetadataCollection {
+    public function setResource(?RepoResource $res): MetadataCollection {
         $this->resource = $res;
         return $this;
     }

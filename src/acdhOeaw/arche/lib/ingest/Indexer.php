@@ -63,7 +63,7 @@ class Indexer {
     /**
      * Detected operating system path enconding.
      */
-    static private ?string $pathEncoding;
+    static private ?string $pathEncoding = null;
 
     /**
      * Extracts relative path from a full path (by skipping cfg:containerDir)
@@ -232,7 +232,7 @@ class Indexer {
     /**
      * An object providing metadata when given a resource file path
      */
-    private MetaLookupInterface $metaLookup;
+    private ?MetaLookupInterface $metaLookup = null;
 
     /**
      * Should files without external metadata (provided by the `$metaLookup`
@@ -525,11 +525,11 @@ class Indexer {
 
     /**
      * Sets a class providing metadata for indexed files.
-     * @param MetaLookupInterface $metaLookup
+     * @param ?MetaLookupInterface $metaLookup
      * @param bool $require should files lacking external metadata be skipped
      * @return Indexer
      */
-    public function setMetaLookup(MetaLookupInterface $metaLookup,
+    public function setMetaLookup(?MetaLookupInterface $metaLookup,
                                   bool $require = false): Indexer {
         $this->metaLookup        = $metaLookup;
         $this->metaLookupRequire = $require;
@@ -601,7 +601,7 @@ class Indexer {
             $class    = $i->isDir() ? $this->collectionClass : $this->binaryClass;
             $parent   = $this->parent === null ? null : $this->parent->getUri();
             $file     = new File($this->repo, $id, $i->getPathname(), $location, $class, $parent);
-            if ($this->metaLookup) {
+            if ($this->metaLookup !== null) {
                 $file->setMetaLookup($this->metaLookup, $this->metaLookupRequire);
             }
             $skip2 = $this->isSkippedExisting($file);
