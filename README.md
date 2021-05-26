@@ -16,7 +16,7 @@ An library for ingesting data into the ACDH repository.
 
 ### API documentation
 
-https://acdh-oeaw.github.io/arche-docs/arche-lib-ingest/
+https://acdh-oeaw.github.io/arche-docs/devdocs/namespaces/acdhoeaw-arche-lib-ingest.html
 
 ### Usage examples
 
