@@ -5,7 +5,7 @@
 [![Coverage Status](https://coveralls.io/repos/github/acdh-oeaw/arche-lib-ingest/badge.svg?branch=master)](https://coveralls.io/github/acdh-oeaw/arche-lib-ingest?branch=master)
 [![License](https://poser.pugx.org/acdh-oeaw/arche-lib-ingest/license)](https://packagist.org/packages/acdh-oeaw/arche-lib-ingest)
 
-An library for ingesting data into the ACDH repository.
+A library for ingesting data into the ACDH repository.
 
 ## Installation
 
