@@ -599,7 +599,7 @@ class Indexer {
             $location = self::getRelPath(self::sanitizePath($i->getPathname()), $this->containerDir);
             $id       = $this->containerToUriPrefix . str_replace('%2F', '/', rawurlencode($location));
             $class    = $i->isDir() ? $this->collectionClass : $this->binaryClass;
-            $parent   = $this->parent === null ? null : $this->parent->getUri();
+            $parent   = isset($this->parent) ? $this->parent->getUri() : null;
             $file     = new File($this->repo, $id, $i->getPathname(), $location, $class, $parent);
             if ($this->metaLookup !== null) {
                 $file->setMetaLookup($this->metaLookup, $this->metaLookupRequire);

@@ -42,6 +42,9 @@ use zozlak\RdfConstants as RC;
  */
 class File extends SchemaObject {
 
+    const GUZZLE_PSR7_V1_MIME_FUNC = '\GuzzleHttp\Psr7\mimetype_from_filename';
+    const GUZZLE_PSR7_V2_MIME_FUNC = '\GuzzleHttp\Psr7\MimeType::fromFilename';
+
     /**
      * File path
      * @var string 
@@ -170,7 +173,8 @@ class File extends SchemaObject {
      * @return string
      */
     public function getMime(): ?string {
-        $mime = \GuzzleHttp\Psr7\mimetype_from_filename(basename($this->path));
+        $f    = function_exists(self::GUZZLE_PSR7_V1_MIME_FUNC) ? self::GUZZLE_PSR7_V1_MIME_FUNC : self::GUZZLE_PSR7_V2_MIME_FUNC;
+        $mime = $f(basename($this->path));
         if ($mime === null) {
             $mime = mime_content_type($this->path);
         }
