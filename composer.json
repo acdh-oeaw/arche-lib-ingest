@@ -13,7 +13,7 @@
     "require": {
         "php": ">=8",
         "guzzlehttp/guzzle": "^7",
-        "acdh-oeaw/arche-lib": "^2.0.4",
+        "acdh-oeaw/arche-lib": "^2.0.4 | ^3.0.0",
         "acdh-oeaw/easyrdf": ">=0.13.3",
         "acdh-oeaw/uri-normalizer": "*",
         "zozlak/rdf-constants": "^1.1"
