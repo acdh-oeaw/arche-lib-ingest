@@ -7,6 +7,7 @@ rest:
         metadataParentProperty: X-PARENT-PROPERTY
         metadataWriteMode: X-METADATA-WRITE-MODE
         transactionId: X-TRANSACTION-ID
+        withReferences: X-WITH-REFERENCES
     handlers:
         methods:
             get: []

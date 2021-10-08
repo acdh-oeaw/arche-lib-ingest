@@ -57,9 +57,8 @@ abstract class TestBase extends \PHPUnit\Framework\TestCase {
      * @var array<RepoResource>
      */
     private array $resources;
-
     private float $time = 0;
-    
+
     public function setUp(): void {
         $this->resources = [];
         $this->startTimer();
@@ -69,24 +68,10 @@ abstract class TestBase extends \PHPUnit\Framework\TestCase {
         $this->noteTime('test ' . self::$n++);
         self::$repo->rollback();
 
-        // delete resources starting with the "most metadata rich" which is a simple heuristic for avoiding 
-        // unneeded resource updates when deleting one pointed by many others (such resources are typicaly 
-        // "metadata poor" therefore deleting them as the last ones should do the job)
-        $queue = [];
-        foreach ($this->resources as $n => $i) {
-            try {
-                $queue[$n] = count($i->getGraph()->propertyUris());
-            } catch (Deleted $e) {
-                
-            } catch (NotFound $e) {
-                
-            }
-        }
-        arsort($queue);
         self::$repo->begin();
-        foreach ($queue as $n => $count) {
+        foreach ($this->resources as $r) {
             try {
-                $this->resources[$n]->delete(true, true);
+                $r->delete(true, true, self::$config->schema->parent);
             } catch (Deleted $e) {
                 
             } catch (NotFound $e) {
