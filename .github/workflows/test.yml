@@ -14,7 +14,6 @@ jobs:
         rm -f config/run.d/gui.sh config/run.d/oaipmh.sh config/run.d/resolver.sh config/run.d/fcs.sh config/run.d/openrefine.sh
         cp tests/config.yaml config/yaml/local.yaml
         cp .github/workflows/30-fixVocabularies.sh config/initScripts/
-        echo '{"require":{"acdh-oeaw/arche-core": "^3.2.0-alpha","acdh-oeaw/arche-doorkeeper":"*","acdh-oeaw/arche-schema-ingest":"^3.0.2","acdh-oeaw/arche-lib-ingest":"^2.0.3","zozlak/yaml-merge": "^1"}}' > config/composer.json
     - name: run repo docker
       run: |
         mkdir log
