@@ -28,6 +28,7 @@ namespace acdhOeaw\arche\lib\ingest;
 
 use InvalidArgumentException;
 use GuzzleHttp\Exception\ClientException;
+use GuzzleHttp\Promise\RejectedPromise;
 use EasyRdf\Graph;
 use EasyRdf\Resource;
 use acdhOeaw\arche\lib\Repo;
@@ -195,11 +196,14 @@ class MetadataCollection extends Graph {
      *   MetadataCollection::ERRMODE_PASS) In the ERRMODE_PASS mode the first
      *   encountered error turns off the autocomit and causes an error to be
      *   thrown at the end of the import.
+     * @param int $concurrency number of parallel requests to the repository
+     *   allowed during the import
      * @return array<RepoResource>
      * @throws InvalidArgumentException
      */
     public function import(string $namespace, int $singleOutNmsp,
-                           string $errorMode = self::ERRMODE_FAIL): array {
+                           string $errorMode = self::ERRMODE_FAIL,
+                           int $concurrency = 3): array {
         $idProp = $this->repo->getSchema()->id;
 
         $dict = [self::SKIP, self::CREATE];
@@ -217,50 +221,86 @@ class MetadataCollection extends Graph {
         }
         $toBeImported = $this->filterResources($namespace, $singleOutNmsp);
 
-        $repoResources = [];
+        $mapErrorMode = $errorMode === self::ERRMODE_PASS ? Repo::REJECT_INCLUDE : Repo::REJECT_FAIL;
+        $N            = count($toBeImported);
+        $n            = 0;
+        $errorCount   = 0;
+        $f            = function (Resource $res, Repo $repo) use (&$n, $N,
+                                                                  $idProp,
+                                                                  &$errorCount) {
+            $n++;
+            $uri = $res->getUri();
+            echo self::$debug ? "Importing " . $uri . " ($n/$N)\n" : "";
+            $this->sanitizeResource($res);
+
+            $ids = array_map(function ($x) {
+                return (string) $x;
+            }, $res->allResources($idProp));
+            $promise = $this->repo->getResourceByIdsAsync($ids);
+            $promise = $promise->then(
+                function (RepoResource $repoRes) use ($res, $errorCount, $n, $N) {
+                    echo self::$debug ? "\tupdating " . $repoRes->getUri() . "($n/$N)\n" : "";
+                    $repoRes->setMetadata($res);
+                    return $repoRes->updateMetadataAsync()->then(function () use ($repoRes,
+                                                                                  $errorCount) {
+                        //$this->handleAutoCommit($errorCount);
+                        return $repoRes;
+                    });
+                }, function ($reason) use ($res, $repo, &$errorCount, $n, $N) {
+                    if (!($reason instanceof NotFound)) {
+                        $errorCount++;
+                        return new RejectedPromise($reason);
+                    }
+                    return $repo->createResourceAsync($res)->then(function (RepoResource $repoRes) use ($errorCount,
+                                                                                                        $n,
+                                                                                                        $N) {
+                        echo self::$debug ? "\tcreated " . $repoRes->getUri() . " ($n/$N)\n" : "";
+                        //$this->handleAutoCommit($errorCount);
+                        return $repoRes;
+                    });
+                });
+            return $promise;
+        };
+        $repoResources = $this->repo->map($toBeImported, $f, $concurrency, $mapErrorMode);
+        return $repoResources;
+
         foreach ($toBeImported as $n => $res) {
             $uri = $res->getUri();
 
             echo self::$debug ? "Importing " . $uri . " (" . ($n + 1) . "/" . count($toBeImported) . ")\n" : "";
             $this->sanitizeResource($res);
 
-            $error = null;
             try {
-                try {
-                    $ids = array_map(function($x) {
-                        return (string) $x;
-                    }, $res->allResources($idProp));
-                    $repoRes = $this->repo->getResourceByIds($ids);
+                $ids = array_map(function ($x) {
+                    return (string) $x;
+                }, $res->allResources($idProp));
+                $repoRes = $this->repo->getResourceByIds($ids);
 
-                    echo self::$debug ? "\tupdating " . $repoRes->getUri() . "\n" : "";
-                    $repoRes->setMetadata($res);
-                    $repoRes->updateMetadata();
-                    $repoResources[] = $repoRes;
-                } catch (NotFound $ex) {
-                    $repoRes         = $this->repo->createResource($res);
-                    echo self::$debug ? "\tcreated " . $repoRes->getUri() . "\n" : "";
-                    $repoResources[] = $repoRes;
-                } catch (AmbiguousMatch $ex) {
-                    $error = $ex;
-                }
-
+                echo self::$debug ? "\tupdating " . $repoRes->getUri() . "\n" : "";
+                $repoRes->setMetadata($res);
+                $repoRes->updateMetadata();
+                $repoResources[] = $repoRes;
                 $this->handleAutoCommit($errorCount);
-            } catch (ClientException $ex) {
-                $error = $ex;
-            }
-            if ($error !== null && $errorMode === self::ERRMODE_PASS) {
-                $errorCount++;
-                $msg = $error->getMessage();
-                if ($error instanceof ClientException && $error->getResponse() !== null) {
-                    $msg = (string) $error->getResponse()->getBody();
-                }
-                if (!self::$debug) {
-                    echo "$uri error " . get_class($error) . ": " . $msg . "\n";
+            } catch (NotFound) {
+                $repoRes         = $this->repo->createResource($res);
+                echo self::$debug ? "\tcreated " . $repoRes->getUri() . "\n" : "";
+                $repoResources[] = $repoRes;
+                $this->handleAutoCommit($errorCount);
+            } catch (ClientException | AmbiguousMatch $error) {
+                if ($errorMode !== self::ERRMODE_PASS) {
+                    throw $error;
                 } else {
-                    echo "\terror " . get_class($error) . ": " . $msg . "\n";
+                    $errorCount++;
+                    $msg = $error->getMessage();
+                    if ($error instanceof ClientException && $error->getResponse() !== null) {
+                        $msg = (string) $error->getResponse()->getBody();
+                    }
+                    if (!self::$debug) {
+                        echo "$uri error " . get_class($error) . ": " . $msg . "\n";
+                    } else {
+                        echo "\terror " . get_class($error) . ": " . $msg . "\n";
+                    }
                 }
-            } elseif ($error !== null) {
-                throw $error;
             }
         }
         if ($errorCount > 0) {
@@ -512,5 +552,4 @@ class MetadataCollection extends Graph {
         }
         return false;
     }
-
 }
