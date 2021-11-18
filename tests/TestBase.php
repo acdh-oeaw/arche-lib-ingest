@@ -40,16 +40,19 @@ abstract class TestBase extends \PHPUnit\Framework\TestCase {
 
     static protected Repo $repo;
     static protected object $config;
-    static private int $n = 1;
+    static protected string $test = '';
 
     static public function setUpBeforeClass(): void {
         $cfgFile      = __DIR__ . '/config.yaml';
         self::$config = json_decode(json_encode(yaml_parse_file($cfgFile)));
         self::$repo   = Repo::factory($cfgFile);
+        if (file_exists(__DIR__ . '/time.log')) {
+            unlink(__DIR__ . '/time.log');
+        }
     }
 
     static public function tearDownAfterClass(): void {
-        
+        echo "\n" . file_get_contents(__DIR__ . '/time.log');
     }
 
     /**
@@ -65,7 +68,7 @@ abstract class TestBase extends \PHPUnit\Framework\TestCase {
     }
 
     public function tearDown(): void {
-        $this->noteTime('test ' . self::$n++);
+        $this->noteTime(static::class . "::" . self::$test . "()");
         self::$repo->rollback();
 
         self::$repo->begin();
@@ -93,7 +96,7 @@ abstract class TestBase extends \PHPUnit\Framework\TestCase {
     }
 
     protected function noteTime(string $msg = ''): void {
-        $t = microtime(true) - $this->time;
-        file_put_contents(__DIR__ . '/time.log', (new DateTime())->format('Y-m-d H:i:s.u') . "\t$t\t$msg\n", \FILE_APPEND);
+        $t = round(microtime(true) - $this->time, 6);
+        file_put_contents(__DIR__ . '/time.log', "$t\t$msg\n", \FILE_APPEND);
     }
 }
