@@ -45,6 +45,8 @@ class MetadataCollectionTest extends TestBase {
      * @group metadataCollection
      */
     public function testSimple(): void {
+        self::$test = 'testSimple';
+        
         $graph  = new MetadataCollection(self::$repo, __DIR__ . '/data/graph-small.ttl');
         self::$repo->begin();
         $indRes = $graph->import('https://id.acdh.oeaw.ac.at/', MetadataCollection::SKIP);
@@ -58,6 +60,8 @@ class MetadataCollectionTest extends TestBase {
      * @group metadataCollection
      */
     public function testSimpleDouble(): void {
+        self::$test = 'testSimpleDouble';
+        
         $graph   = new MetadataCollection(self::$repo, __DIR__ . '/data/graph-small.ttl');
         self::$repo->begin();
         $indRes1 = $graph->import('https://id.acdh.oeaw.ac.at/', MetadataCollection::SKIP);
@@ -88,6 +92,8 @@ class MetadataCollectionTest extends TestBase {
      * @group metadataCollection
      */
     public function testLarge(): void {
+        self::$test = 'testLarge';
+        
         $graph  = new MetadataCollection(self::$repo, __DIR__ . '/data/graph-large.ttl');
         self::$repo->begin();
         $indRes = $graph->import('https://id.acdh.oeaw.ac.at/', MetadataCollection::SKIP);
@@ -101,6 +107,8 @@ class MetadataCollectionTest extends TestBase {
      * @group metadataCollection
      */
     public function testCycle(): void {
+        self::$test = 'testCycle';
+        
         $graph  = new MetadataCollection(self::$repo, __DIR__ . '/data/graph-cycle.ttl');
         self::$repo->begin();
         $indRes = $graph->import('http://some.id', MetadataCollection::SKIP);
@@ -114,6 +122,8 @@ class MetadataCollectionTest extends TestBase {
      * @group metadataCollection
      */
     public function testBNodes(): void {
+        self::$test = 'testBNodes';
+        
         $graph  = new MetadataCollection(self::$repo, __DIR__ . '/data/bnodes.ttl');
         self::$repo->begin();
         $indRes = $graph->import('https://id.acdh.oeaw.ac.at/', MetadataCollection::SKIP);
@@ -127,6 +137,8 @@ class MetadataCollectionTest extends TestBase {
      * @group metadataCollection
      */
     public function testAutoRefsCreation(): void {
+        self::$test = 'testAutoRefsCreation';
+        
         $graph  = new MetadataCollection(self::$repo, __DIR__ . '/data/graph-autorefs.ttl');
         self::$repo->begin();
         $indRes = $graph->import('https://id.acdh.oeaw.ac.at/', MetadataCollection::SKIP);
@@ -140,6 +152,8 @@ class MetadataCollectionTest extends TestBase {
      * @group metadataCollection
      */
     public function testBasicResources(): void {
+        self::$test = 'testBasicResources';
+        
         $graph  = new MetadataCollection(self::$repo, __DIR__ . '/data/basicResources.ttl');
         self::$repo->begin();
         $indRes = $graph->import('https://id.acdh.oeaw.ac.at/', MetadataCollection::SKIP);
@@ -167,6 +181,8 @@ class MetadataCollectionTest extends TestBase {
      * @group largeMetadataCollection
      */
     public function testBig(): void {
+        self::$test = 'testBig';
+        
         $graph  = new MetadataCollection(self::$repo, __DIR__ . '/data/schnitzler-diaries.rdf');
         self::$repo->begin();
         $indRes = $graph->import('https://id.acdh.oeaw.ac.at/', MetadataCollection::SKIP);
@@ -180,6 +196,8 @@ class MetadataCollectionTest extends TestBase {
      * @group metadataCollection
      */
     public function testImportSingleOutNmsp(): void {
+        self::$test = 'testImportSingleOutNmsp';
+        
         $graph  = new MetadataCollection(self::$repo, __DIR__ . '/data/basicResources.ttl');
         self::$repo->begin();
         $this->expectException(\InvalidArgumentException::class);
@@ -193,6 +211,8 @@ class MetadataCollectionTest extends TestBase {
      * @group metadataCollection
      */
     public function testImportErrorMode(): void {
+        self::$test = 'testImportErrorMode';
+        
         $graph  = new MetadataCollection(self::$repo, __DIR__ . '/data/basicResources.ttl');
         self::$repo->begin();
         $this->expectException(\InvalidArgumentException::class);

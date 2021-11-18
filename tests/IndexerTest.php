@@ -102,6 +102,8 @@ class IndexerTest extends TestBase {
      * @group indexer
      */
     public function testSimple(): void {
+        self::$test = 'testSimple';
+        
         $this->ind->setFilter('/txt|xml/', Indexer::MATCH);
         $this->ind->setFilter('/^(skiptest.txt)$/', Indexer::SKIP);
         self::$repo->begin();
@@ -116,6 +118,8 @@ class IndexerTest extends TestBase {
      * @group indexer
      */
     public function testSkipNotExist(): void {
+        self::$test = 'testSkipNotExist';
+        
         $this->testSimple();
 
         $this->ind->setFilter('', Indexer::SKIP);
@@ -132,6 +136,8 @@ class IndexerTest extends TestBase {
      * @group indexer
      */
     public function testSkipExist(): void {
+        self::$test = 'testSkipExist';
+        
         $indRes1 = $indRes2 = [];
 
         $this->ind->setFilter('/txt/', Indexer::MATCH);
@@ -157,6 +163,8 @@ class IndexerTest extends TestBase {
      * @group indexerSkip
      */
     public function testSkipBinaryExist(): void {
+        self::$test = 'testSkipBinaryExist';
+        
         $indRes1 = $indRes2 = [];
 
         $this->ind->setFilter('/txt/', Indexer::MATCH);
@@ -181,6 +189,8 @@ class IndexerTest extends TestBase {
      * @group indexer
      */
     public function testMetaFromFile(): void {
+        self::$test = 'testMetaFromFile';
+        
         $metaLookup = new MetaLookupFile(['.'], '.ttl');
         $this->ind->setDepth(0);
         $this->ind->setMetaLookup($metaLookup);
@@ -199,6 +209,8 @@ class IndexerTest extends TestBase {
      * @group indexer
      */
     public function testMetaFromGraph(): void {
+        self::$test = 'testMetaFromGraph';
+        
         $graph      = new Graph();
         $graph->parseFile(__DIR__ . '/data/sample.xml.ttl');
         $metaLookup = new MetaLookupGraph($graph, self::$repo->getSchema()->id);
@@ -219,6 +231,8 @@ class IndexerTest extends TestBase {
      * @group indexer
      */
     public function testSkipWithoutMetaInFile(): void {
+        self::$test = 'testSkipWithoutMetaInFile';
+        
         $metaLookup = new MetaLookupFile(['.'], '.ttl');
         self::$repo->begin();
         $this->ind->setMetaLookup($metaLookup, true);
@@ -236,6 +250,8 @@ class IndexerTest extends TestBase {
      * @group indexer
      */
     public function testWithoutMetaInGraph(): void {
+        self::$test = 'testWithoutMetaInGraph';
+        
         $metaLookup = new MetaLookupFile(['.'], '.ttl');
         self::$repo->begin();
         $this->ind->setMetaLookup($metaLookup, true);
@@ -253,6 +269,8 @@ class IndexerTest extends TestBase {
      * @group indexer
      */
     public function testMergeOnExtMeta(): void {
+        self::$test = 'testMergeOnExtMeta';
+        
         $idProp    = self::$repo->getSchema()->id;
         $titleProp = self::$repo->getSchema()->label;
         $commonId  = 'https://my.id.nmsp/' . rand();
@@ -285,6 +303,8 @@ class IndexerTest extends TestBase {
      * @group indexer
      */
     public function testMergeAndDeleted(): void {
+        self::$test = 'testMergeAndDeleted';
+        
         $idProp    = self::$repo->getSchema()->id;
         $titleProp = self::$repo->getSchema()->label;
         $commonId  = 'https://my.id.nmsp/' . rand();
@@ -330,6 +350,8 @@ class IndexerTest extends TestBase {
      * @group indexer
      */
     public function testAutocommit(): void {
+        self::$test = 'testAutocommit';
+        
         self::$repo->begin();
         $this->ind->setFilter('/txt|xml/');
         $this->ind->setAutoCommit(2);
@@ -343,6 +365,8 @@ class IndexerTest extends TestBase {
      * @group indexer
      */
     public function testNewVersionCreation(): void {
+        self::$test = 'testNewVersionCreation';
+        
         $pidProp = self::$repo->getSchema()->ingest->pid;
         $pid = 'https://sample.pid/' . rand();
         
@@ -402,6 +426,8 @@ class IndexerTest extends TestBase {
      * @group largeIndexer
      */
     public function testRealWorldData(): void {
+        self::$test = 'testRealWorldData';
+        
         $this->ind->setFilter('/.*/');
         $this->ind->setDepth(100);
         self::$repo->begin();
@@ -416,6 +442,8 @@ class IndexerTest extends TestBase {
      * @large
      */
     public function testBigFile(): void {
+        self::$test = 'testBigFile';
+        
         $bufLen = 1024 * 1024;
         $buf = str_repeat('a', $bufLen); // 1 MB
         $count = 1024; // 1 GB
