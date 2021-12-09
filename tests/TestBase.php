@@ -96,7 +96,8 @@ abstract class TestBase extends \PHPUnit\Framework\TestCase {
     }
 
     protected function noteTime(string $msg = ''): void {
-        $t = round(microtime(true) - $this->time, 6);
+        $t = microtime(true) - $this->time;
+        $t = sprintf("%.6f", $t);
         file_put_contents(__DIR__ . '/time.log', "$t\t$msg\n", \FILE_APPEND);
     }
 }
