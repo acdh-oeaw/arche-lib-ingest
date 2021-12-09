@@ -33,8 +33,6 @@ use EasyRdf\Graph;
 use EasyRdf\Resource;
 use acdhOeaw\arche\lib\Repo;
 use acdhOeaw\arche\lib\RepoResource;
-use acdhOeaw\arche\lib\exception\NotFound;
-use acdhOeaw\arche\lib\exception\AmbiguousMatch;
 use acdhOeaw\UriNormalizer;
 
 /**
@@ -213,8 +211,6 @@ class MetadataCollection extends Graph {
         if (!in_array($errorMode, [self::ERRMODE_FAIL, self::ERRMODE_PASS])) {
             throw new InvalidArgumentException('errorMode parameters must be one of MetadataCollection::ERRMODE_FAIL and MetadataCollection::ERRMODE_PASS');
         }
-        $errorCount              = 0;
-        $this->autoCommitCounter = 0;
 
         if (!$this->preprocessed) {
             $this->preprocess();
@@ -222,91 +218,69 @@ class MetadataCollection extends Graph {
         $toBeImported = $this->filterResources($namespace, $singleOutNmsp);
 
         $mapErrorMode = $errorMode === self::ERRMODE_PASS ? Repo::REJECT_INCLUDE : Repo::REJECT_FAIL;
-        $N            = count($toBeImported);
-        $n            = 0;
-        $errorCount   = 0;
-        $f            = function (Resource $res, Repo $repo) use (&$n, $N,
-                                                                  $idProp,
-                                                                  &$errorCount) {
+
+        // The only possible way of performing an atomic "check if resources exists and create it if not"
+        // is to try to create it, therefore the algorithm goes as follows:
+        // - [promise1] try to create the resource
+        //   - if it succeeded, just return the repo resource
+        //   - if it failed check the reason
+        //     - if it's something other than primary key violation, return a RejectedPromise
+        //       (which will be handled accordingly to the $mapErrorMode
+        //     - it it's primary key violation such a resource exists already so:
+        //       - [promise2] find it
+        //         - [promise3] update its metadata
+        $N = count($toBeImported);
+        $n = 0;
+        $f = function (Resource $res, Repo $repo) use (&$n, $N, $idProp) {
             $n++;
             $uri = $res->getUri();
             echo self::$debug ? "Importing " . $uri . " ($n/$N)\n" : "";
             $this->sanitizeResource($res);
 
-            $ids = array_map(function ($x) {
-                return (string) $x;
-            }, $res->allResources($idProp));
-            $promise = $this->repo->getResourceByIdsAsync($ids);
-            $promise = $promise->then(
-                function (RepoResource $repoRes) use ($res, $errorCount, $n, $N) {
-                    echo self::$debug ? "\tupdating " . $repoRes->getUri() . "($n/$N)\n" : "";
-                    $repoRes->setMetadata($res);
-                    return $repoRes->updateMetadataAsync()->then(function () use ($repoRes,
-                                                                                  $errorCount) {
-                        //$this->handleAutoCommit($errorCount);
-                        return $repoRes;
-                    });
-                }, function ($reason) use ($res, $repo, &$errorCount, $n, $N) {
-                    if (!($reason instanceof NotFound)) {
-                        $errorCount++;
+            $promise1 = $this->repo->createResourceAsync($res);
+            $promise1 = $promise1->then(
+                function (RepoResource $repoRes) use ($res, $n, $N) {
+                    echo self::$debug ? "\tcreated " . $repoRes->getUri() . " ($n/$N)\n" : "";
+                    return $repoRes;
+                }
+            );
+            $promise1 = $promise1->otherwise(
+                function ($reason) use ($res, $idProp, $n, $N) {
+                    if (!($reason instanceof ClientException) || !str_contains($reason->getMessage(), 'SQLSTATE[23505]')) {
                         return new RejectedPromise($reason);
                     }
-                    return $repo->createResourceAsync($res)->then(function (RepoResource $repoRes) use ($errorCount,
-                                                                                                        $n,
-                                                                                                        $N) {
-                        echo self::$debug ? "\tcreated " . $repoRes->getUri() . " ($n/$N)\n" : "";
-                        //$this->handleAutoCommit($errorCount);
-                        return $repoRes;
-                    });
-                });
-            return $promise;
-        };
-        $repoResources = $this->repo->map($toBeImported, $f, $concurrency, $mapErrorMode);
-        return $repoResources;
-
-        foreach ($toBeImported as $n => $res) {
-            $uri = $res->getUri();
-
-            echo self::$debug ? "Importing " . $uri . " (" . ($n + 1) . "/" . count($toBeImported) . ")\n" : "";
-            $this->sanitizeResource($res);
-
-            try {
-                $ids = array_map(function ($x) {
-                    return (string) $x;
-                }, $res->allResources($idProp));
-                $repoRes = $this->repo->getResourceByIds($ids);
-
-                echo self::$debug ? "\tupdating " . $repoRes->getUri() . "\n" : "";
-                $repoRes->setMetadata($res);
-                $repoRes->updateMetadata();
-                $repoResources[] = $repoRes;
-                $this->handleAutoCommit($errorCount);
-            } catch (NotFound) {
-                $repoRes         = $this->repo->createResource($res);
-                echo self::$debug ? "\tcreated " . $repoRes->getUri() . "\n" : "";
-                $repoResources[] = $repoRes;
-                $this->handleAutoCommit($errorCount);
-            } catch (ClientException | AmbiguousMatch $error) {
-                if ($errorMode !== self::ERRMODE_PASS) {
-                    throw $error;
-                } else {
-                    $errorCount++;
-                    $msg = $error->getMessage();
-                    if ($error instanceof ClientException && $error->getResponse() !== null) {
-                        $msg = (string) $error->getResponse()->getBody();
-                    }
-                    if (!self::$debug) {
-                        echo "$uri error " . get_class($error) . ": " . $msg . "\n";
-                    } else {
-                        echo "\terror " . get_class($error) . ": " . $msg . "\n";
-                    }
+                    $ids = array_map(function ($x) {
+                        return (string) $x;
+                    }, $res->allResources($idProp));
+                    $promise2 = $this->repo->getResourceByIdsAsync($ids);
+                    $promise2 = $promise2->then(
+                        function (RepoResource $repoRes) use ($res, $n, $N) {
+                            echo self::$debug ? "\tupdating " . $repoRes->getUri() . " ($n/$N)\n" : "";
+                            $repoRes->setMetadata($res);
+                            $promise3 = $repoRes->updateMetadataAsync();
+                            $promise3 = $promise3->then(fn() => $repoRes);
+                            return $promise3;
+                        }
+                    );
+                    return $promise2;
                 }
+            );
+            return $promise1;
+        };
+        
+        $allRepoRes = [];
+        $chunkSize  = $this->autoCommit > 0 ? $this->autoCommit : count($toBeImported);
+        for ($i = 0; $i < count($toBeImported); $i += $chunkSize) {
+            if ($i > 0) {
+                echo self::$debug ? "Autocommit\n" : '';
+                $this->repo->commit();
+                $this->repo->begin();
             }
+            $chunk        = array_slice($toBeImported, $i, $chunkSize);
+            $chunkRepoRes = $this->repo->map($chunk, $f, $concurrency, $mapErrorMode);
+            $allRepoRes   = array_merge($allRepoRes, $chunkRepoRes);
         }
-        if ($errorCount > 0) {
-            throw new IndexerException('There was at least one error during the import');
-        }
-        return array_values($repoResources);
+        return $allRepoRes;
     }
 
     /**
@@ -537,19 +511,5 @@ class MetadataCollection extends Graph {
                 }
             }
         }
-    }
-
-    private function handleAutoCommit(int $errorCount): bool {
-        if ($this->autoCommit > 0 && $errorCount === 0) {
-            $this->autoCommitCounter++;
-            if ($this->autoCommitCounter >= $this->autoCommit) {
-                echo self::$debug ? "Autocommit\n" : '';
-                $this->repo->commit();
-                $this->autoCommitCounter = 0;
-                $this->repo->begin();
-                return true;
-            }
-        }
-        return false;
     }
 }
