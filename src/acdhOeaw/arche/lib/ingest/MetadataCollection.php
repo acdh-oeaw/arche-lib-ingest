@@ -27,12 +27,12 @@
 namespace acdhOeaw\arche\lib\ingest;
 
 use InvalidArgumentException;
-use GuzzleHttp\Exception\ClientException;
 use GuzzleHttp\Promise\RejectedPromise;
 use EasyRdf\Graph;
 use EasyRdf\Resource;
 use acdhOeaw\arche\lib\Repo;
 use acdhOeaw\arche\lib\RepoResource;
+use acdhOeaw\arche\lib\exception\Conflict;
 use acdhOeaw\UriNormalizer;
 
 /**
@@ -246,7 +246,7 @@ class MetadataCollection extends Graph {
             );
             $promise1 = $promise1->otherwise(
                 function ($reason) use ($res, $idProp, $n, $N) {
-                    if (!($reason instanceof ClientException) || !str_contains($reason->getMessage(), 'SQLSTATE[23505]')) {
+                    if (!($reason instanceof Conflict)) {
                         return new RejectedPromise($reason);
                     }
                     $ids = array_map(function ($x) {
