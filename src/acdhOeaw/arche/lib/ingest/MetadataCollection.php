@@ -26,6 +26,7 @@
 
 namespace acdhOeaw\arche\lib\ingest;
 
+use Exception;
 use InvalidArgumentException;
 use GuzzleHttp\Promise\RejectedPromise;
 use EasyRdf\Graph;
@@ -42,10 +43,11 @@ use acdhOeaw\UriNormalizer;
  */
 class MetadataCollection extends Graph {
 
-    const SKIP         = 1;
-    const CREATE       = 2;
-    const ERRMODE_FAIL = 'fail';
-    const ERRMODE_PASS = 'pass';
+    const SKIP            = 1;
+    const CREATE          = 2;
+    const ERRMODE_FAIL    = 'fail';
+    const ERRMODE_PASS    = 'pass';
+    const ERRMODE_INCLUDE = 'include';
 
     /**
      * Turns debug messages on
@@ -189,14 +191,21 @@ class MetadataCollection extends Graph {
      * @param int $singleOutNmsp should repository resources be created
      *   representing URIs outside $namespace (MetadataCollection::SKIP or
      *   MetadataCollection::CREATE)
-     * @param string $errorMode should single resource ingestion error break the
-     *   import? (MetadataCollection::ERRMODE_FAIL or 
-     *   MetadataCollection::ERRMODE_PASS) In the ERRMODE_PASS mode the first
-     *   encountered error turns off the autocomit and causes an error to be
-     *   thrown at the end of the import.
+     * @param string $errorMode what should happen if an error is encountered?
+     *   One of:
+     *   - MetadataCollection::ERRMODE_FAIL - the first encountered error throws
+     *     an exception.
+     *   - MetadataCollection::ERRMODE_PASS - the first encountered error turns 
+     *     off the autocommit but ingestion is continued. When all resources are 
+     *     processed and there was no errors, an array of RepoResource objects 
+     *     is returned. If there was an error, an exception is thrown.
+     *   - MetadataCollection::ERRMODE_INCLUDE - the first encountered error 
+     *     turns off the autocommit but ingestion is continued. The returned 
+     *     array contains RepoResource objects for successful ingestions and
+     *     Exception objects for failed ones.
      * @param int $concurrency number of parallel requests to the repository
      *   allowed during the import
-     * @return array<RepoResource>
+     * @return array<RepoResource|ClientException>
      * @throws InvalidArgumentException
      */
     public function import(string $namespace, int $singleOutNmsp,
@@ -208,7 +217,7 @@ class MetadataCollection extends Graph {
         if (!in_array($singleOutNmsp, $dict)) {
             throw new InvalidArgumentException('singleOutNmsp parameters must be one of MetadataCollection::SKIP, MetadataCollection::CREATE');
         }
-        if (!in_array($errorMode, [self::ERRMODE_FAIL, self::ERRMODE_PASS])) {
+        if (!in_array($errorMode, [self::ERRMODE_FAIL, self::ERRMODE_PASS, self::ERRMODE_INCLUDE])) {
             throw new InvalidArgumentException('errorMode parameters must be one of MetadataCollection::ERRMODE_FAIL and MetadataCollection::ERRMODE_PASS');
         }
 
@@ -217,7 +226,7 @@ class MetadataCollection extends Graph {
         }
         $toBeImported = $this->filterResources($namespace, $singleOutNmsp);
 
-        $mapErrorMode = $errorMode === self::ERRMODE_PASS ? Repo::REJECT_INCLUDE : Repo::REJECT_FAIL;
+        $mapErrorMode = $errorMode === self::ERRMODE_FAIL ? Repo::REJECT_FAIL : Repo::REJECT_INCLUDE;
 
         // The only possible way of performing an atomic "check if resources exists and create it if not"
         // is to try to create it, therefore the algorithm goes as follows:
@@ -267,19 +276,27 @@ class MetadataCollection extends Graph {
             );
             return $promise1;
         };
-        
-        $allRepoRes = [];
-        $chunkSize  = $this->autoCommit > 0 ? $this->autoCommit : count($toBeImported);
+
+        $allRepoRes  = [];
+        $errorsCount = 0;
+        $chunkSize   = $this->autoCommit > 0 ? $this->autoCommit : count($toBeImported);
         for ($i = 0; $i < count($toBeImported); $i += $chunkSize) {
-            if ($i > 0) {
+            if ($i > 0 && $errorsCount === 0) {
                 echo self::$debug ? "Autocommit\n" : '';
                 $this->repo->commit();
                 $this->repo->begin();
             }
             $chunk        = array_slice($toBeImported, $i, $chunkSize);
             $chunkRepoRes = $this->repo->map($chunk, $f, $concurrency, $mapErrorMode);
-            $allRepoRes   = array_merge($allRepoRes, $chunkRepoRes);
+            foreach ($chunkRepoRes as $j) {
+                $errorsCount += (int) ($j instanceof Exception);
+            }
+            $allRepoRes = array_merge($allRepoRes, $chunkRepoRes);
         }
+        if ($errorsCount > 0 && $errorMode === self::ERRMODE_PASS) {
+            throw new IndexerException('There was at least one error during the import');
+        }
+
         return $allRepoRes;
     }
 

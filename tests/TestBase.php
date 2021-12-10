@@ -28,6 +28,7 @@ namespace acdhOeaw\arche\lib\ingest\tests;
 
 use DateTime;
 use acdhOeaw\arche\lib\Repo;
+use acdhOeaw\arche\lib\RepoResourceInterface;
 use acdhOeaw\arche\lib\exception\Deleted;
 use acdhOeaw\arche\lib\exception\NotFound;
 
@@ -74,7 +75,9 @@ abstract class TestBase extends \PHPUnit\Framework\TestCase {
         self::$repo->begin();
         foreach ($this->resources as $r) {
             try {
-                $r->delete(true, true, self::$config->schema->parent);
+                if ($r instanceof RepoResourceInterface) {
+                    $r->delete(true, true, self::$config->schema->parent);
+                }
             } catch (Deleted $e) {
                 
             } catch (NotFound $e) {
