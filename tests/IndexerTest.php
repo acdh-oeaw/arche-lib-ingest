@@ -434,7 +434,7 @@ class IndexerTest extends TestBase {
         $indRes = $this->ind->index();
         $this->noteResources($indRes);
         self::$repo->commit();
-        $this->assertEquals(79, count($indRes));
+        $this->assertEquals(80, count($indRes));
     }    
     
     /**
