@@ -29,6 +29,7 @@ namespace acdhOeaw\arche\lib\ingest;
 use Exception;
 use InvalidArgumentException;
 use GuzzleHttp\Promise\RejectedPromise;
+use GuzzleHttp\Exception\ClientException;
 use EasyRdf\Graph;
 use EasyRdf\Resource;
 use acdhOeaw\arche\lib\Repo;
@@ -88,11 +89,6 @@ class MetadataCollection extends Graph {
     private int $autoCommit = 0;
 
     /**
-     * Used to determine when the autocommit should tak place
-     */
-    private int $autoCommitCounter = 0;
-
-    /**
      * Is the metadata graph preprocessed already?
      */
     private bool $preprocessed = false;
@@ -100,7 +96,7 @@ class MetadataCollection extends Graph {
     /**
      * Creates a new metadata parser.
      * 
-     * @param Fedora $repo
+     * @param Repo $repo
      * @param string $file
      * @param string $format
      */
@@ -171,16 +167,17 @@ class MetadataCollection extends Graph {
      * Imports the whole graph by looping over all resources.
      * 
      * A repository resource is created for every node containing at least one 
-     * cfg:fedoraIdProp property and:
-     * - containg at least one other property
+     * identifer and:
+     * - with at least one outgoing edge (there's at least one triple having
+     *   the node as a subject) of property other than identifier property
      * - or being within $namespace
      * - or when $singleOutNmsp equals to MetadataCollection::CREATE
      * 
-     * Resources without cfg:fedoraIdProp property are skipped as we are unable
+     * Resources without identifier property are skipped as we are unable
      * to identify them on the next import (which would lead to duplication).
      * 
      * Resource with a fully qualified URI is considered as having
-     * cfg:fedoraIdProp (its URI is taken as cfg:fedoraIdProp property value).
+     * the identifier property value (its URI is promoted to it).
      * 
      * Resources in the graph can denote relationships in any way but all
      * object URIs already existing in the repository and all object URIs in the
@@ -207,6 +204,8 @@ class MetadataCollection extends Graph {
      *   allowed during the import
      * @return array<RepoResource|ClientException>
      * @throws InvalidArgumentException
+     * @throws IndexerException
+     * @throws ClientException
      */
     public function import(string $namespace, int $singleOutNmsp,
                            string $errorMode = self::ERRMODE_FAIL,
@@ -248,7 +247,7 @@ class MetadataCollection extends Graph {
 
             $promise1 = $this->repo->createResourceAsync($res);
             $promise1 = $promise1->then(
-                function (RepoResource $repoRes) use ($res, $n, $N) {
+                function (RepoResource $repoRes) use ($n, $N) {
                     echo self::$debug ? "\tcreated " . $repoRes->getUri() . " ($n/$N)\n" : "";
                     return $repoRes;
                 }
@@ -267,8 +266,7 @@ class MetadataCollection extends Graph {
                             echo self::$debug ? "\tupdating " . $repoRes->getUri() . " ($n/$N)\n" : "";
                             $repoRes->setMetadata($res);
                             $promise3 = $repoRes->updateMetadataAsync();
-                            $promise3 = $promise3->then(fn() => $repoRes);
-                            return $promise3;
+                            return $promise3 === null ? $repoRes : $promise3->then(fn() => $repoRes);
                         }
                     );
                     return $promise2;
@@ -307,7 +305,7 @@ class MetadataCollection extends Graph {
      * @param int $singleOutNmsp should repository resources be created
      *   representing URIs outside $namespace (MetadataCollection::SKIP or
      *   MetadataCollection::CREATE)
-     * @return array<RepoResource>
+     * @return array<Resource>
      */
     private function filterResources(string $namespace, int $singleOutNmsp): array {
         $idProp = $this->repo->getSchema()->id;
@@ -427,7 +425,7 @@ class MetadataCollection extends Graph {
     /**
      * Promotes BNodes to their first schema:id and fixes references to them.
      */
-    private function promoteBNodesToUris() {
+    private function promoteBNodesToUris(): void {
         echo self::$debug ? "Promoting BNodes to URIs...\n" : '';
 
         $idProp = $this->repo->getSchema()->id;
