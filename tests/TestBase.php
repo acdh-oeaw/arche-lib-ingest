@@ -27,7 +27,9 @@
 namespace acdhOeaw\arche\lib\ingest\tests;
 
 use DateTime;
+use GuzzleHttp\Exception\ClientException;
 use acdhOeaw\arche\lib\Repo;
+use acdhOeaw\arche\lib\RepoResource;
 use acdhOeaw\arche\lib\RepoResourceInterface;
 use acdhOeaw\arche\lib\exception\Deleted;
 use acdhOeaw\arche\lib\exception\NotFound;
@@ -90,6 +92,11 @@ abstract class TestBase extends \PHPUnit\Framework\TestCase {
         }
     }
 
+    /**
+     * 
+     * @param array<RepoResource|ClientException> $res
+     * @return void
+     */
     protected function noteResources(array $res): void {
         $this->resources = array_merge($this->resources, array_values($res));
     }

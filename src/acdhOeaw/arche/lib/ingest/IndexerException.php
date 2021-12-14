@@ -28,6 +28,7 @@ namespace acdhOeaw\arche\lib\ingest;
 
 use Exception;
 use Throwable;
+use acdhOeaw\arche\lib\RepoResource;
 
 /**
  * Exception used by the Indexer class, giving access to resources which were
@@ -39,7 +40,7 @@ class IndexerException extends Exception {
 
     /**
      * A collection of already processed resources
-     * @var array
+     * @var array<RepoResource>
      */
     private $resources = [];
 
@@ -48,7 +49,7 @@ class IndexerException extends Exception {
      * @param string $message exception message
      * @param int $code exception code
      * @param Throwable $previous original exception
-     * @param array $resources collection of already commited resources
+     * @param array<RepoResource> $resources collection of already commited resources
      */
     public function __construct(string $message = "", int $code = 0,
                                 Throwable $previous = null,
@@ -60,7 +61,7 @@ class IndexerException extends Exception {
     /**
      * Returns the collection of resources which were already processed when
      * an error occured.
-     * @return array
+     * @return array<RepoResource>
      */
     public function getCommitedResources(): array {
         return $this->resources;

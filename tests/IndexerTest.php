@@ -29,6 +29,7 @@ namespace acdhOeaw\arche\lib\ingest\tests;
 use EasyRdf\Graph;
 use acdhOeaw\arche\lib\exception\NotFound;
 use acdhOeaw\arche\lib\ingest\Indexer;
+use acdhOeaw\arche\lib\RepoResource;
 use acdhOeaw\arche\lib\ingest\metaLookup\MetaLookupFile;
 use acdhOeaw\arche\lib\ingest\metaLookup\MetaLookupGraph;
 
@@ -40,15 +41,14 @@ use acdhOeaw\arche\lib\ingest\metaLookup\MetaLookupGraph;
 class IndexerTest extends TestBase {
 
     const URI_PREFIX = 'acdhContainer://';
-    static private $res;
+    static private RepoResource $res;
 
     static public function setUpBeforeClass(): void {
         parent::setUpBeforeClass();
 
-//        \acdhOeaw\acdhRepoIngest\schema\SchemaObject::$debug = true;
 //        MetaLookupFile::$debug                               = true;
 //        MetaLookupGraph::$debug                              = true;
-//        Indexer::$debug = true;
+        Indexer::$debug = true;
 
         self::$repo->begin();
         $id = 'http://my.test/id';
@@ -57,7 +57,7 @@ class IndexerTest extends TestBase {
         } catch (NotFound $ex) {
             $meta      = (new Graph())->resource('.');
             $meta->addLiteral(self::$config->schema->label, 'test parent');
-            $meta->addLiteral(self::$config->schema->ingest->location, 'data');
+            $meta->addLiteral(self::$config->schema->fileName, 'data');
             $meta->addResource(self::$config->schema->id, $id);
             self::$res = self::$repo->createResource($meta);
         }
@@ -67,22 +67,22 @@ class IndexerTest extends TestBase {
     static public function tearDownAfterClass(): void {
         parent::tearDownAfterClass();
 
-        if (self::$res) {
+        if (isset(self::$res)) {
             self::$repo->begin();
             self::$res->delete(true, true);
             self::$repo->commit();
         }
     }
 
-    private $ind;
-    private $tmpDir = __DIR__ . '/tmp/';
-    private $tmpContent;
+    private Indexer $ind;
+    private string $tmpDir = __DIR__ . '/tmp/';
+    private string $tmpContent;
 
     public function setUp(): void {
         parent::setUp();
-        $this->ind = new Indexer(__DIR__, self::URI_PREFIX);
+        $this->ind = new Indexer(__DIR__ . '/data', self::URI_PREFIX, self::$repo);
         $this->ind->setDepth(1);
-        $this->ind->setParent(self::$res, true);
+        $this->ind->setParent(self::$res);
         $this->ind->setUploadSizeLimit(10000000);
         if (file_exists($this->tmpDir)) {
             system("rm -fR " . $this->tmpDir);
@@ -107,7 +107,7 @@ class IndexerTest extends TestBase {
         $this->ind->setFilter('/txt|xml/', Indexer::MATCH);
         $this->ind->setFilter('/^(skiptest.txt)$/', Indexer::SKIP);
         self::$repo->begin();
-        $indRes = $this->ind->index();
+        $indRes = $this->ind->import(Indexer::ERRMODE_FAIL, 1);
         $this->noteResources($indRes);
         self::$repo->commit();
 
@@ -125,7 +125,7 @@ class IndexerTest extends TestBase {
         $this->ind->setFilter('', Indexer::SKIP);
         $this->ind->setSkip(Indexer::SKIP_NOT_EXIST);
         self::$repo->begin();
-        $indRes = $this->ind->index();
+        $indRes = $this->ind->import();
         $this->noteResources($indRes);
         self::$repo->commit();
 
@@ -142,7 +142,7 @@ class IndexerTest extends TestBase {
 
         $this->ind->setFilter('/txt/', Indexer::MATCH);
         self::$repo->begin();
-        $indRes1 = $this->ind->index();
+        $indRes1 = $this->ind->import();
         $this->noteResources($indRes1);
         self::$repo->commit();
 
@@ -151,7 +151,7 @@ class IndexerTest extends TestBase {
         $this->ind->setSkip(Indexer::SKIP_EXIST);
         $this->ind->setFilter('/(txt|xml)$/', Indexer::MATCH);
         self::$repo->begin();
-        $indRes2 = $this->ind->index();
+        $indRes2 = $this->ind->import();
         $this->noteResources($indRes2);
         self::$repo->commit();
 
@@ -169,7 +169,7 @@ class IndexerTest extends TestBase {
 
         $this->ind->setFilter('/txt/', Indexer::MATCH);
         self::$repo->begin();
-        $indRes1 = $this->ind->index();
+        $indRes1 = $this->ind->import();
         $this->noteResources($indRes1);
         self::$repo->commit();
 
@@ -178,7 +178,7 @@ class IndexerTest extends TestBase {
         $this->ind->setSkip(Indexer::SKIP_BINARY_EXIST);
         $this->ind->setFilter('/(txt|xml)$/', Indexer::MATCH);
         self::$repo->begin();
-        $indRes2 = $this->ind->index();
+        $indRes2 = $this->ind->import();
         $this->noteResources($indRes2);
         self::$repo->commit();
 
@@ -196,7 +196,7 @@ class IndexerTest extends TestBase {
         $this->ind->setMetaLookup($metaLookup);
         $this->ind->setFilter('/sample.xml$/');
         self::$repo->begin();
-        $indRes     = $this->ind->index();
+        $indRes     = $this->ind->import();
         $this->noteResources($indRes);
         self::$repo->commit();
 
@@ -218,7 +218,7 @@ class IndexerTest extends TestBase {
         $this->ind->setMetaLookup($metaLookup);
         $this->ind->setFilter('/sample.xml$/');
         self::$repo->begin();
-        $indRes     = $this->ind->index();
+        $indRes     = $this->ind->import();
         $this->noteResources($indRes);
         self::$repo->commit();
 
@@ -237,7 +237,7 @@ class IndexerTest extends TestBase {
         self::$repo->begin();
         $this->ind->setMetaLookup($metaLookup, true);
         $this->ind->setFilter('/xml$/');
-        $indRes     = $this->ind->index();
+        $indRes     = $this->ind->import();
         $this->noteResources($indRes);
         self::$repo->commit();
 
@@ -256,7 +256,7 @@ class IndexerTest extends TestBase {
         self::$repo->begin();
         $this->ind->setMetaLookup($metaLookup, true);
         $this->ind->setFilter('/sample.xml$/');
-        $indRes     = $this->ind->index();
+        $indRes     = $this->ind->import();
         $this->noteResources($indRes);
         self::$repo->commit();
 
@@ -288,10 +288,10 @@ class IndexerTest extends TestBase {
         mkdir($this->tmpDir);
         file_put_contents($this->tmpDir . $fileName . '.ttl', $meta->getGraph()->serialise('turtle'));
         file_put_contents($this->tmpDir . $fileName, 'sample content');
-        $this->ind->setPaths([basename($this->tmpDir)]);
+        //$this->ind->setPaths([basename($this->tmpDir)]);
         $this->ind->setFilter('/^' . $fileName . '$/');
         $this->ind->setMetaLookup(new MetaLookupFile(['.'], '.ttl'));
-        $indRes = $this->ind->index();
+        $indRes = $this->ind->import();
         $this->noteResources($indRes);
         self::$repo->commit();
 
@@ -334,10 +334,10 @@ class IndexerTest extends TestBase {
         file_put_contents($this->tmpDir . $fileName . '.ttl', $meta->getGraph()->serialise('turtle'));
         file_put_contents($this->tmpDir . $fileName, 'sample content');
         // index
-        $this->ind->setPaths(['tmp']);
+        //$this->ind->setPaths(['tmp']);
         $this->ind->setFilter('/^' . $fileName . '$/');
         $this->ind->setMetaLookup(new MetaLookupFile(['.'], '.ttl'));
-        $indRes = $this->ind->index();
+        $indRes = $this->ind->import();
         $this->noteResources($indRes);
         self::$repo->commit();
 
@@ -355,7 +355,7 @@ class IndexerTest extends TestBase {
         self::$repo->begin();
         $this->ind->setFilter('/txt|xml/');
         $this->ind->setAutoCommit(2);
-        $indRes = $this->ind->index();
+        $indRes = $this->ind->import();
         $this->noteResources($indRes);
         self::$repo->commit();
         $this->assertEquals(7, count($indRes));
@@ -375,7 +375,7 @@ class IndexerTest extends TestBase {
         $this->ind->setFlatStructure(true);
 
         self::$repo->begin();
-        $indRes1 = $this->ind->index();
+        $indRes1 = $this->ind->import();
         $this->noteResources($indRes1);
         $initRes = array_pop($indRes1);
         $meta    = $initRes->getMetadata();
@@ -388,7 +388,7 @@ class IndexerTest extends TestBase {
 
         self::$repo->begin();
         $this->ind->setVersioning(Indexer::VERSIONING_DIGEST, Indexer::PID_PASS);
-        $indRes2 = $this->ind->index();
+        $indRes2 = $this->ind->import();
         $this->noteResources($indRes2);
         self::$repo->commit();
 
@@ -400,14 +400,14 @@ class IndexerTest extends TestBase {
         $prevResId = (string) $meta->getResource(self::$repo->getSchema()->isNewVersionOf);
         $this->assertTrue(!empty($prevResId));
         $prevRes     = self::$repo->getResourceById($prevResId);
-        $prevMeta    = $prevRes->getMetadata(true);
+        $prevMeta    = $prevRes->getMetadata();
         $this->assertNull($prevMeta->getResource($pidProp)); // PID not present in the old resource
 
         file_put_contents(__DIR__ . '/data/sample.xml', random_int(0, 123456));
 
         self::$repo->begin();
         $this->ind->setVersioning(Indexer::VERSIONING_DIGEST, Indexer::PID_KEEP);
-        $indRes3 = $this->ind->index();
+        $indRes3 = $this->ind->import();
         $this->noteResources($indRes3);
         self::$repo->commit();
 
@@ -415,7 +415,7 @@ class IndexerTest extends TestBase {
         $newestRes  = array_pop($indRes3);
         $newestMeta = $newestRes->getMetadata();
         $this->assertNull($newestMeta->getResource($pidProp));
-        $newMeta    = $newRes->getMetadata(true);
+        $newMeta    = $newRes->getMetadata();
         $this->assertEquals($pid, (string) $newMeta->getResource($pidProp));
         $this->assertTrue(in_array($pid, $newRes->getIds()));
     }
@@ -431,7 +431,7 @@ class IndexerTest extends TestBase {
         $this->ind->setFilter('/.*/');
         $this->ind->setDepth(100);
         self::$repo->begin();
-        $indRes = $this->ind->index();
+        $indRes = $this->ind->import();
         $this->noteResources($indRes);
         self::$repo->commit();
         $this->assertEquals(80, count($indRes));
@@ -456,10 +456,10 @@ class IndexerTest extends TestBase {
         fclose($f);
         unset($buf);
         
-        $this->ind->setPaths(['tmp']);
+        //$this->ind->setPaths(['tmp']);
         $this->ind->setUploadSizeLimit($count * $bufLen);
         self::$repo->begin();
-        $indRes = $this->ind->index();
+        $indRes = $this->ind->import();
         $this->noteResources($indRes);
         self::$repo->commit();
         

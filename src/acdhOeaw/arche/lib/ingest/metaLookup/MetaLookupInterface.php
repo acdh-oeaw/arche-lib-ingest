@@ -40,11 +40,11 @@ interface MetaLookupInterface {
     /**
      * Returns metadata coupled with a file.
      * @param string $path path to the data file
-     * @param \EasyRdf\Resource meta existing data file metadata
+     * @param array<string> $identifiers identifiers (URIs) of the file
      * @param bool $require should error be thrown when no metadata was found
      *   (when false a resource with no triples is returned)
-     * @return \EasyRdf\Resource fetched metadata
+     * @return Resource fetched metadata
      */
-    public function getMetadata(string $path, Resource $meta,
+    public function getMetadata(string $path, array $identifiers,
                                 bool $require = false): Resource;
 }

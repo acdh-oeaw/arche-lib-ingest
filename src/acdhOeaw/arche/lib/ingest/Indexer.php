@@ -26,19 +26,22 @@
 
 namespace acdhOeaw\arche\lib\ingest;
 
-use BadMethodCallException;
-use InvalidArgumentException;
+use Exception;
 use RuntimeException;
-use DateTime;
+use BadMethodCallException;
 use DirectoryIterator;
-use Throwable;
+use SplFileInfo;
+use EasyRdf\Graph;
+use zozlak\RdfConstants as RDF;
+use GuzzleHttp\Exception\ClientException;
 use acdhOeaw\UriNormalizer;
-use acdhOeaw\arche\lib\exception\NotFound;
+use acdhOeaw\arche\lib\BinaryPayload;
 use acdhOeaw\arche\lib\Repo;
 use acdhOeaw\arche\lib\RepoResource;
+use acdhOeaw\arche\lib\Schema;
+use acdhOeaw\arche\lib\ingest\util\ProgressMeter;
+use acdhOeaw\arche\lib\ingest\metaLookup\MetaLookupConstant;
 use acdhOeaw\arche\lib\ingest\metaLookup\MetaLookupInterface;
-use acdhOeaw\arche\lib\ingest\metaLookup\MetaLookupException;
-use acdhOeaw\arche\lib\ingest\schema\File;
 
 /**
  * Ingests files into the repository
@@ -59,72 +62,45 @@ class Indexer {
     const VERSIONING_DATE   = 4;
     const PID_KEEP          = 1;
     const PID_PASS          = 2;
-
-    /**
-     * Detected operating system path enconding.
-     */
-    static private ?string $pathEncoding = null;
-
-    /**
-     * Extracts relative path from a full path (by skipping cfg:containerDir)
-     * @param string $fullPath
-     * @param string $containerDir
-     */
-    static public function getRelPath(string $fullPath, string $containerDir): string {
-        if (!strpos($fullPath, $containerDir) === 0) {
-            throw new InvalidArgumentException('path is outside the container');
-        }
-        $containerDir = preg_replace('|/$|', '', $containerDir);
-        return substr($fullPath, strlen($containerDir) + 1);
-    }
-
-    /**
-     * Tries to detect path encoding used in the operating system by looking
-     * into locale settings.
-     * @throws RuntimeException
-     */
-    static private function detectPathEncoding() {
-        if (self::$pathEncoding) {
-            return;
-        }
-        foreach (explode(';', setlocale(LC_ALL, 0)) as $i) {
-            $i = explode('=', $i);
-            if ($i[0] === 'LC_CTYPE') {
-                $tmp = preg_replace('|^.*[.]|', '', $i[1]);
-                if (is_numeric($tmp)) {
-                    self::$pathEncoding = 'windows-' . $tmp;
-                    break;
-                } else if (preg_match('|utf-?8|i', $tmp)) {
-                    self::$pathEncoding = 'utf-8';
-                    break;
-                } else {
-                    throw new RuntimeException('Operation system encoding can not be determined');
-                }
-            }
-        }
-    }
-
-    /**
-     * Sanitizes file path - turns all \ into / and assures it is UTF-8 encoded.
-     * @param string $path
-     * @param string $pathEncoding
-     * @return string
-     */
-    static public function sanitizePath(string $path,
-                                        string $pathEncoding = null): string {
-        if ($pathEncoding === null) {
-            self::detectPathEncoding();
-            $pathEncoding = self::$pathEncoding;
-        }
-        $path = iconv($pathEncoding, 'utf-8', $path);
-        $path = str_replace('\\', '/', $path);
-        return $path;
-    }
+    const ERRMODE_FAIL      = 'fail';
+    const ERRMODE_PASS      = 'pass';
+    const ERRMODE_INCLUDE   = 'include';
+    const ENC_UTF8          = 'utf-8';
 
     /**
      * Turns debug messages on
      */
-    static public bool $debug = false;
+    static public bool $debug = true;
+
+    /**
+     * Detected operating system path enconding.
+     */
+    static private string $pathEncoding = '';
+
+    /**
+     * Tries to detect path encoding used in the operating system.
+     * @throws RuntimeException
+     */
+    static private function pathToUtf8(string $path): string {
+        if (empty(self::$pathEncoding)) {
+            $ctype = setlocale(LC_CTYPE, '');
+            if (!empty($ctype)) {
+                $ctype = (string) preg_replace('|^.*[.]|', '', $ctype);
+                if (is_numeric($ctype)) {
+                    self::$pathEncoding = 'windows-' . $ctype;
+                } else if (preg_match('|utf-?8|i', $ctype)) {
+                    self::$pathEncoding = 'utf-8';
+                } else {
+                    throw new RuntimeException('Operation system encoding can not be determined');
+                }
+            }
+            // if there's nothing in LC_ALL, optimistically assume utf-8
+            if (empty(self::$pathEncoding)) {
+                self::$pathEncoding = self::ENC_UTF8;
+            }
+        }
+        return self::$pathEncoding === self::ENC_UTF8 ? $path : (string) iconv(self::$pathEncoding, 'utf-8', $path);
+    }
 
     /**
      * RepoResource which children are created by the Indexer
@@ -132,22 +108,9 @@ class Indexer {
     private RepoResource $parent;
 
     /**
-     * File system paths where resource children are located
-     * 
-     * It is a concatenation of the container root path coming from the
-     * class settings and the location path
-     * properties of the RepoResource set using the `setParent()` method.
-     * 
-     * They can be also set manually using the `setPaths()` method
-     * 
-     * @var array<string>
-     */
-    private $paths = [''];
-
-    /**
      * Regular expression for matching child resource file names.
      */
-    private string $filter = '//';
+    private string $filter = '';
 
     /**
      * Regular expression for excluding child resource file names.
@@ -165,8 +128,8 @@ class Indexer {
      * Maximum size of a child resource (in bytes) resulting in the creation
      * of binary resources.
      * 
-     * For child resources bigger then this limit an "RDF only" Fedora resources
-     * will be created.
+     * For child resources bigger then this limit an "RDF only" repository 
+     * resources will be created.
      * 
      * Special value of -1 means "import all no matter their size"
      */
@@ -185,7 +148,7 @@ class Indexer {
     /**
      * How many subsequent subdirectories should be indexed.
      */
-    private int $depth = 1000;
+    private int $depth = \PHP_INT_MAX;
 
     /**
      * Number of resource automatically triggering a commit (0 - no auto commit)
@@ -193,16 +156,22 @@ class Indexer {
     private int $autoCommit = 0;
 
     /**
-     * Base ingestion path to be substituted with the $containerToUriPrefix
+     * Base ingestion path to be substituted with the $idPrefix
      * to form a binary id.
      */
-    private ?string $containerDir = null;
+    private string $directory;
 
     /**
-     * Namespaces to substitute the $containerDir in the ingested binary path
+     * Length in bytes of the sanitized version of the $directory property
+     * @var int
+     */
+    private int $directoryLength;
+
+    /**
+     * Namespaces to substitute the $directory in the ingested binary path
      * to form a binary id.
      */
-    private ?string $containerToUriPrefix = null;
+    private ?string $idPrefix = null;
 
     /**
      * Should resources be created for empty directories.
@@ -212,13 +181,13 @@ class Indexer {
     private bool $includeEmpty = false;
 
     /**
-     * Should files (not)existing in the Fedora be skipped?
+     * Should files (not)existing in the repository be skipped?
      * @see setSkip()
      */
     private int $skipMode = self::SKIP_NONE;
 
     /**
-     * Should new versions of binary resources already existing in the Fedora
+     * Should new versions of binary resources already existing in the repository
      * be created (if not, an existing resource is simply overwritten).
      */
     private int $versioningMode = self::VERSIONING_NONE;
@@ -232,7 +201,13 @@ class Indexer {
     /**
      * An object providing metadata when given a resource file path
      */
-    private ?MetaLookupInterface $metaLookup = null;
+    private MetaLookupInterface $metaLookup;
+
+    /**
+     * 
+     * @var UriNormalizer
+     */
+    private UriNormalizer $uriNorm;
 
     /**
      * Should files without external metadata (provided by the `$metaLookup`
@@ -246,93 +221,56 @@ class Indexer {
     private Repo $repo;
 
     /**
-     * Collection of resources commited during the ingestion. Used to handle
-     * errors.
-     * @var array
-     * @see index()
+     * Repository schema
      */
-    private array $commitedRes;
+    private Schema $schema;
 
     /**
-     * Collection of indexed resources
-     * @var array
-     * @see index()
-     */
-    private array $indexedRes;
-
-    /**
+     * Creates the Indexer object.
      * 
-     * @param string $containerDir
-     * @param string $containerToUriPrefix
+     * It's important to understand how the file/directory paths are mapped to
+     * repository resource identifiers:
+     * 
+     * - first the path is stripped from the `$directory`
+     * - the rest is URL-encoded but with '/' characters being preserved
+     * - at the end the $idPrefix is prepended
+     * 
+     * e.g. for a file `/foo/foo bar/baz` with `$directory` `/foo/` and 
+     * `$idPrefix` `https://id.nmsp/foobar/`, it will be done as follows:
+     * 
+     * - `foo/foo bar/baz` => `foo bar/baz`
+     * - `foo bar/baz` => `foo%20bar/baz`
+     * - `foo%20bar/baz` => `https://id.nmsp/foobar/foo%20bar/baz`
+     * 
+     * It's worth mentioning (lack of) slashes at the end of `$directory` and
+     * `$idPrefix` doesn't matter (it's standardized internally).
+     * 
+     * @param string $directory path to be indexed.
+     * @param string $idPrefix prefix used to create repository
+     *   resource identifiers from file/directory paths (see above).
+     * @param Repo $repo repository connectiond object.
      */
-    public function __construct(string $containerDir,
-                                string $containerToUriPrefix) {
-        $this->containerDir         = preg_replace('|/$|', '', $containerDir) . '/';
-        $this->containerToUriPrefix = preg_replace('|/$|', '', $containerToUriPrefix) . '/';
+    public function __construct(string $directory, string $idPrefix, Repo $repo) {
+        $this->directory = $directory;
+        $this->idPrefix  = $idPrefix;
+        $this->repo      = $repo;
+
+        $this->schema          = $this->repo->getSchema();
+        $this->binaryClass     = $this->schema->ingest->defaultBinaryClass;
+        $this->collectionClass = $this->schema->ingest->defaultCollectionClass;
+        $this->directoryLength = strlen(self::pathToUtf8($this->directory));
+        $this->uriNorm         = UriNormalizer::factory($this->schema->id);
+        $this->metaLookup      = new MetaLookupConstant((new Graph())->resource('.'));
     }
 
     /**
-     * Sets the repository connection object
-     * @param Repo
-     */
-    public function setRepo(Repo $repo): Indexer {
-        $this->repo = $repo;
-        $this->readRepoConfig();
-        return $this;
-    }
-
-    /**
-     * Sets the parent resource for the indexed files.
-     * 
-     * Automatically sets ingestion paths based on the resource's 
-     * cfg.schema.ingest.location RDF property values (only existing directories
-     * are set).
+     * Sets the parent resource for the files in the `$directory` (constructor 
+     * parameter) directory.
      * 
      * @param RepoResource $resource
-     * @param bool $strictLocations should locations (parent resource path within
-     *   a containerDir) be checked? (checked means at least one location must
-     *   be present and all locations must exist on a local storage)
      */
-    public function setParent(RepoResource $resource,
-                              bool $strictLocations = false): Indexer {
+    public function setParent(RepoResource $resource): Indexer {
         $this->parent = $resource;
-        $this->repo   = $this->parent->getRepo();
-        $this->readRepoConfig();
-
-        $metadata  = $this->parent->getMetadata();
-        $locations = $metadata->allLiterals($this->repo->getSchema()->ingest->location);
-        $missLoc   = [];
-        if (count($locations) > 0) {
-            $this->paths = [];
-            foreach ($locations as $i) {
-                $loc = preg_replace('|/$|', '', $this->containerDir . (string) $i);
-                if (is_dir($loc)) {
-                    $this->paths[] = (string) $i;
-                } else {
-                    $missLoc = (string) $i;
-                }
-            }
-        }
-        if ($strictLocations) {
-            if (count($locations) === 0) {
-                throw new IndexerException('Resource has no location properties');
-            }
-            if (count($missLoc) > 0) {
-                throw new IndexerException('Some resource locations do not exist: ' . implode(', ', $missLoc));
-            }
-        }
-
-        return $this;
-    }
-
-    /**
-     * Overrides file system paths to look into for child resources.
-     * 
-     * @param array $paths
-     * @return Indexer
-     */
-    public function setPaths(array $paths): Indexer {
-        $this->paths = $paths;
         return $this;
     }
 
@@ -343,6 +281,7 @@ class Indexer {
      * `Indexer::index()` (the only exception is when you set auto commit to 1
      * forcing commiting each and every resource separately but you probably 
      * don't want to do that for performance reasons).
+     * 
      * @param int $count number of resource automatically triggering a commit 
      *   (0 - no auto commit)
      * @return Indexer
@@ -354,11 +293,17 @@ class Indexer {
 
     /**
      * Defines if (and how) resources should be skipped from indexing based on
-     * their (not)existance in Fedora.
+     * their (not)existance in the repository.
      * 
-     * @param int $skipMode mode either Indexer::SKIP_NONE (default), 
-     *   Indexer::SKIP_NOT_EXIST, Indexer::SKIP_EXIST or 
-     *   Indexer::SKIP_BINARY_EXIST
+     * @param int $skipMode mode. One of:
+     *   - Indexer::SKIP_NONE (default) - import no matter if a corresponding
+     *     repository resource exists or not, 
+     *   - Indexer::SKIP_NOT_EXIST - import only if a corresponding repo 
+     *     resource doesn't exist at the beginning of the ingestion,
+     *   - Indexer::SKIP_EXIST - import only if a corresponding repo resource
+     *     exists at the beginning of the ingestion, 
+     *   - Indexer::SKIP_BINARY_EXIST - import if a corresponding repo resource
+     *     doesn't exist or exists but contains no binary payload
      * @return Indexer
      */
     public function setSkip(int $skipMode): Indexer {
@@ -464,10 +409,10 @@ class Indexer {
     /**
      * Sets size treshold for uploading child resources as binary resources.
      * 
-     * For files bigger then this treshold a "pure RDF" Fedora resources will
+     * For files bigger then this treshold a "pure RDF" repository resources will
      * be created containing full metadata but no binary content.
      * 
-     * @param bool $limit maximum size in bytes; 0 will cause no files upload,
+     * @param int $limit maximum size in bytes; 0 will cause no files upload,
      *   special value of -1 (default) will cause all files to be uploaded no 
      *   matter their size
      * @return Indexer
@@ -478,9 +423,9 @@ class Indexer {
     }
 
     /**
-     * Sets maximum indexing depth. 
+     * Sets maximum indexing depth.
      * 
-     * @param int $depth maximum indexing depth (0 - only initial Resource dir, 1 - also its direct subdirectories, etc.)
+     * @param int $depth maximum indexing depth (0 - only initial resource dir, 1 - also its direct subdirectories, etc.)
      * @return Indexer
      */
     public function setDepth(int $depth): Indexer {
@@ -489,9 +434,7 @@ class Indexer {
     }
 
     /**
-     * Sets if Fedora resources should be created for empty directories.
-     * 
-     * Note this setting is skipped when the `$flatStructure` is set to `true`.
+     * Sets if repository resources should be created for empty directories.
      * 
      * @param bool $include should resources be created for empty directories
      * @return Indexer
@@ -503,33 +446,12 @@ class Indexer {
     }
 
     /**
-     * Sets up the ingestion container path. This path is replaced with the
-     * $containerToUriPrefix to form a binary id.
-     * @param string $containerDir container dir path
-     * @return \acdhOeaw\acdhRepoIngest\Indexer
-     */
-    public function setContainerDir(string $containerDir): Indexer {
-        $this->containerDir = $containerDir;
-        return $this;
-    }
-
-    /**
-     * Sets up the namespace replaceing the $containerDir to form a binary id.
-     * @param string $prefix namespace
-     * @return \acdhOeaw\acdhRepoIngest\Indexer
-     */
-    public function setContainerToUriPrefix(string $prefix): Indexer {
-        $this->containerToUriPrefix = $prefix;
-        return $this;
-    }
-
-    /**
      * Sets a class providing metadata for indexed files.
-     * @param ?MetaLookupInterface $metaLookup
+     * @param MetaLookupInterface $metaLookup
      * @param bool $require should files lacking external metadata be skipped
      * @return Indexer
      */
-    public function setMetaLookup(?MetaLookupInterface $metaLookup,
+    public function setMetaLookup(MetaLookupInterface $metaLookup,
                                   bool $require = false): Indexer {
         $this->metaLookup        = $metaLookup;
         $this->metaLookupRequire = $require;
@@ -538,248 +460,135 @@ class Indexer {
 
     /**
      * Performs the indexing.
-     * @return array a list RepoResource objects representing indexed resources
-     */
-    public function index(): array {
-        list($indexed, $commited) = $this->__index();
-
-        $this->indexedRes  = [];
-        $this->commitedRes = [];
-        return $indexed;
-    }
-
-    /**
-     * Performs the indexing.
-     * @return array a two-element array with first element containing a collection
-     *   of indexed resources and a second one containing a collection of commited
-     *   resources
-     */
-    private function __index(): array {
-        $this->indexedRes  = [];
-        $this->commitedRes = [];
-
-        if (count($this->paths) === 0) {
-            throw new RuntimeException('No paths set');
-        }
-
-        try {
-            foreach ($this->paths as $path) {
-                foreach (new DirectoryIterator($this->containerDir . $path) as $i) {
-                    $this->indexEntry($i);
-                }
-            }
-        } catch (Throwable $e) {
-            if ($e instanceof IndexerException) {
-                $this->commitedRes = array_merge($this->commitedRes, $e->getCommitedResources());
-            }
-            throw new IndexerException($e->getMessage(), $e->getCode(), $e, $this->commitedRes);
-        }
-
-        return [$this->indexedRes, $this->commitedRes];
-    }
-
-    /**
-     * Processes single directory entry
-     * @param DirectoryIterator $i
-     * @return array
-     */
-    private function indexEntry(DirectoryIterator $i) {
-        if ($i->isDot()) {
-            return;
-        }
-
-        echo self::$debug ? $i->getPathname() . "\n" : "";
-        $file = $res  = null;
-
-        $skip   = $this->isSkipped($i);
-        $upload = $i->isFile() && ($this->uploadSizeLimit > $i->getSize() || $this->uploadSizeLimit === -1);
-
-        $skip2 = false; // to be able to recursively go into directory we can't reuse $skip
-        if (!$skip) {
-            $location = self::getRelPath(self::sanitizePath($i->getPathname()), $this->containerDir);
-            $id       = $this->containerToUriPrefix . str_replace('%2F', '/', rawurlencode($location));
-            $class    = $i->isDir() ? $this->collectionClass : $this->binaryClass;
-            $parent   = isset($this->parent) ? $this->parent->getUri() : null;
-            $file     = new File($this->repo, $id, $i->getPathname(), $location, $class, $parent);
-            if ($this->metaLookup !== null) {
-                $file->setMetaLookup($this->metaLookup, $this->metaLookupRequire);
-            }
-            $skip2 = $this->isSkippedExisting($file);
-        }
-        if (!$skip && !$skip2) {
-            try {
-                $res                                 = $this->performUpdate($i, $file, $upload);
-                $this->indexedRes[$i->getPathname()] = $res;
-                $this->handleAutoCommit();
-            } catch (MetaLookupException $e) {
-                if ($this->metaLookupRequire) {
-                    $skip = true;
-                } else {
-                    throw $e;
-                }
-            } catch (NotFound $e) {
-                if ($this->skipMode === self::SKIP_NOT_EXIST) {
-                    $skip = true;
-                } else {
-                    throw $e;
-                }
-            }
-        } else if ($skip2) {
-            $res = $file->getResource(false, false);
-        }
-        if ($skip || $skip2) {
-            echo self::$debug ? "\tskip" . ($skip2 ? '2' : '') . "\n" : "";
-        }
-
-        echo self::$debug && !$skip && !$skip2 ? "\t" . $res->getUri() . "\n\t" . $res->getUri() . "\n" : "";
-
-        // recursion
-        if ($i->isDir() && (!$skip || $this->flatStructure && $this->depth > 0)) {
-            echo self::$debug ? "entering " . $i->getPathname() . "\n" : "";
-            $ind = clone($this);
-            if (!$this->flatStructure) {
-                $ind->parent = $res;
-            }
-            $ind->setDepth($this->depth - 1);
-            $path              = self::getRelPath($i->getPathname(), $this->containerDir);
-            $ind->setPaths([$path]);
-            list($recRes, $recCom) = $ind->__index();
-            $this->indexedRes  = array_merge($this->indexedRes, $recRes);
-            $this->commitedRes = array_merge($this->commitedRes, $recCom);
-            echo self::$debug ? "going back from " . $path : "";
-            $this->handleAutoCommit();
-            echo self::$debug ? "\n" : "";
-        }
-    }
-
-    /**
-     * Checks if a given file should be skipped because it already exists in the
-     * repository while the Indexer skip mode is set to SKIP_EXIST or SKIP_BINARY_EXIST.
-     * @param File $file file to be checked
-     * @return bool
-     * @throws MetaLookupException
-     */
-    private function isSkippedExisting(File $file): bool {
-        if (!in_array($this->skipMode, [self::SKIP_EXIST, self::SKIP_BINARY_EXIST])) {
-            return false;
-        }
-        try {
-            $res = $file->getResource(false, false);
-            return $res->hasBinaryContent() || $this->skipMode === self::SKIP_EXIST;
-        } catch (MetaLookupException $e) {
-            if ($this->metaLookupRequire) {
-                throw $e;
-            } else {
-                return true;
-            }
-        } catch (NotFound $e) {
-            return false;
-        }
-    }
-
-    /**
-     * Checks if a given file system node should be skipped during import.
      * 
-     * @param DirectoryIterator $i file system node
-     * @return bool
+     * @param string $errorMode what should happen if an error is encountered?
+     *   One of:
+     *   - Indexer::ERRMODE_FAIL - the first encountered error throws
+     *     an exception.
+     *   - Indexer::ERRMODE_PASS - the first encountered error turns 
+     *     off the autocommit but ingestion is continued. When all resources are 
+     *     processed and there was no errors, an array of RepoResource objects 
+     *     is returned. If there was an error, an exception is thrown.
+     *   - Indexer::ERRMODE_INCLUDE - the first encountered error 
+     *     turns off the autocommit but ingestion is continued. The returned 
+     *     array contains RepoResource objects for successful ingestions and
+     *     Exception objects for failed ones.
+     * @param int $concurrency number of parallel requests to the repository
+     *   allowed during the import
+     * @return array<RepoResource|ClientException> a list RepoResource objects representing indexed resources
      */
-    private function isSkipped(DirectoryIterator $i): bool {
-        $isEmptyDir = true;
-        if ($i->isDir()) {
-            foreach (new DirectoryIterator($i->getPathname()) as $j) {
-                if (!$j->isDot()) {
-                    $isEmptyDir = false;
-                    break;
+    public function import(string $errorMode = self::ERRMODE_FAIL,
+                           int $concurrency = 3): array {
+        if (!isset($this->repo)) {
+            throw new IndexerException("Repository connection object isn't set. Call setRepo() or setParent() first or pass the Repo object to the constructor.");
+        }
+        $mapErrorMode = $errorMode === self::ERRMODE_FAIL ? Repo::REJECT_FAIL : Repo::REJECT_INCLUDE;
+        $pidPass      = $this->pidPass === self::PID_PASS;
+
+        echo "\n";
+        // gather files from the filesystem
+        $filesToImport = $this->listFiles(new SplFileInfo($this->directory), 0);
+        $meterId       = self::$debug ? (string) microtime(true) : null;
+        if ($meterId !== null) {
+            ProgressMeter::init($meterId, count($filesToImport));
+        }
+
+        // ingest
+        $f = function (File $file) use ($meterId, $pidPass) {
+            $promise = $file->uploadAsync($this->uploadSizeLimit, $this->skipMode, $this->versioningMode, $pidPass, $meterId);
+            return $promise->wait();
+        };
+        $allRepoRes  = [];
+        $errorsCount = 0;
+        $chunkSize   = $this->autoCommit > 0 ? $this->autoCommit : count($filesToImport);
+        for ($i = 0; $i < count($filesToImport); $i += $chunkSize) {
+            if ($i > 0 && $errorsCount === 0) {
+                echo self::$debug ? "Autocommit\n" : '';
+                $this->repo->commit();
+                $this->repo->begin();
+            }
+            $chunk        = array_slice($filesToImport, $i, $chunkSize);
+            $chunkRepoRes = $this->repo->map($chunk, $f, $concurrency, $mapErrorMode);
+            foreach ($chunkRepoRes as $j) {
+                $errorsCount += (int) ($j instanceof Exception);
+                // get rid of files skipped by the skipMode rule
+                if ($j !== null) {
+                    $allRepoRes[] = $j;
                 }
             }
         }
-        $skipDir         = (!$this->includeEmpty && ($this->depth == 0 || $isEmptyDir) || $this->flatStructure);
-        $filenameInclude = preg_match($this->filter, $i->getFilename());
-        $filenameExclude = strlen($this->filterNot) > 0 && preg_match($this->filterNot, $i->getFilename());
-        $skipFile        = !$filenameInclude || $filenameExclude;
-        return $i->isDir() && $skipDir || !$i->isDir() && $skipFile;
-    }
-
-    /**
-     * Performs autocommit if needed
-     * @return bool if autocommit was performed
-     */
-    private function handleAutoCommit(): bool {
-        $diff = count($this->indexedRes) - count($this->commitedRes);
-        if ($diff >= $this->autoCommit && $this->autoCommit > 0) {
-            echo self::$debug ? " + autocommit" : '';
-            $this->repo->commit();
-            $this->commitedRes = $this->indexedRes;
-            $this->repo->begin();
-            return true;
+        if ($errorsCount > 0 && $errorMode === self::ERRMODE_PASS) {
+            throw new IndexerException('There was at least one error during the import');
         }
-        return false;
+        return $allRepoRes;
     }
 
     /**
-     * Performs file upload taking care of versioning.
-     * @param DirectoryIterator $iter
-     * @param File $file
-     * @param string $parent
-     * @param bool $upload
-     * @return RepoResource
+     * Gets the list of files/dirs matching the filename filters and the depth
+     * limit.
+     * 
+     * @return array<File>
      */
-    public function performUpdate(DirectoryIterator $iter, File $file,
-                                  bool $upload): RepoResource {
-        // check versioning conditions
-        $versioning = $this->versioningMode !== self::VERSIONING_NONE && !$iter->isDir();
-        if ($versioning) {
-            try {
-                $res  = $file->getResource(false);
-                $meta = $res->getMetadata();
-                switch ($this->versioningMode) {
-                    case self::VERSIONING_DATE:
-                        $modDate    = (string) $meta->getLiteral($this->repo->getSchema()->modificationDate);
-                        $locModDate = (new DateTime())->setTimestamp($iter->getMTime())->format('Y-m-d\TH:i:s');
-                        $versioning = $locModDate > $modDate;
-                        break;
-                    case self::VERSIONING_DIGEST:
-                        $hash       = explode(':', (string) $meta->getLiteral($this->repo->getSchema()->hash));
-                        $locHash    = $this->getFileHash($iter->getPathname(), $hash[0]);
-                        $versioning = $hash[1] !== $locHash;
-                        break;
-                    case self::VERSIONING_ALWAYS:
-                        $versioning = true;
-                        break;
+    private function listFiles(SplFileInfo $dir, int $level): array {
+        $iter  = new DirectoryIterator($dir->getPathname());
+        $files = [];
+        foreach ($iter as $file) {
+            if ($file->isFile()) {
+                $filterMatch = empty($this->filter) || preg_match($this->filter, $file->getFilename());
+                $filterSkip  = empty($this->filterNot) || !preg_match($this->filterNot, $file->getFilename());
+                if ($filterMatch && $filterSkip) {
+                    $files[] = $this->createFile($file->getFileInfo());
                 }
-                // it we decided they are same it makes no sense to upload
-                $upload = $versioning;
-            } catch (NotFound $ex) {
-                $versioning = false;
+            } elseif ($file->isDir() && !$file->isDot() && $level < $this->depth) {
+                $files = array_merge($files, $this->listFiles($file, $level + 1));
             }
         }
-
-        $skipNotExist = $this->skipMode === self::SKIP_NOT_EXIST;
-        if (!$versioning) {
-            // ordinary update
-            $res = $file->updateRms(!$skipNotExist, $upload);
-            echo self::$debug ? "\t" . ($file->getCreated() ? "create " : "update ") . ($upload ? "+ upload " : "") . "\n" : '';
-            return $res;
-        } else {
-            $oldRes = $file->createNewVersion($upload, $this->pidPass === self::PID_PASS);
-            $newRes = $file->getResource(false);
-            echo self::$debug ? "\tnewVersion" . ($upload ? " + upload " : "") . "\n" : '';
-            echo self::$debug ? "\t" . $oldRes->getUri() . " ->\n" : '';
-
-            return $newRes;
+        if (!$this->flatStructure && $level > 0 && (count($files) > 0 || $this->includeEmpty)) {
+            $files[] = $this->createFile($dir->getFileInfo());
         }
+        return $files;
     }
 
-    private function readRepoConfig(): void {
-        $c                     = $this->repo->getSchema()->ingest;
-        $this->binaryClass     = $c->defaultBinaryClass;
-        $this->collectionClass = $c->defaultCollectionClass;
-        UriNormalizer::init();
-    }
+    private function createFile(SplFileInfo $file): File {
+        $path   = $file->getPathname();
+        $schema = $this->repo->getSchema();
 
-    private function getFileHash(string $path, string $hashName): string {
-        $hash = hash_init($hashName);
-        hash_update_file($hash, $path);
-        return hash_final($hash, false);
+        $id = self::pathToUtf8($path);
+        $id = str_replace('\\', '/', $id);
+        $id = substr($path, $this->directoryLength);
+        $id = str_replace('%2F', '/', rawurlencode($id));
+        $id = $this->idPrefix . $id;
+
+        $extMeta = $this->metaLookup->getMetadata($path, [$id], $this->metaLookupRequire);
+        // id
+        $extMeta->addResource($schema->id, $id);
+        // filename
+        $extMeta->addLiteral($schema->fileName, $file->getFilename());
+        // class
+        if ($file->isDir() && !empty($this->collectionClass)) {
+            $extMeta->addResource(RDF::RDF_TYPE, $this->collectionClass);
+        } else if ($file->isFile() && !empty($this->binaryClass)) {
+            $extMeta->addResource(RDF::RDF_TYPE, $this->binaryClass);
+        }
+        // parent
+        if (isset($this->parent) && ($this->flatStructure || $path === $this->directory)) {
+            $extMeta->addResource($schema->parent, $this->parent->getUri());
+        }
+        if ($path !== $this->directory && !$this->flatStructure) {
+            $extMeta->addResource($schema->parent, substr($id, 0, strrpos($id, '/') ?: null));
+        }
+        // mime type and binary size
+        if ($file->isFile()) {
+            $extMeta->addLiteral($schema->binarySize, $file->getSize());
+            $mime = BinaryPayload::guzzleMimetype($path);
+            $mime ??= mime_content_type($path);
+            if (!empty($mime)) {
+                $extMeta->addLiteral($schema->mime, $mime);
+            }
+        }
+        // normalize ids
+        $this->uriNorm->normalizeMeta($extMeta);
+
+        return new File($file, $extMeta, $this->repo);
     }
 }
