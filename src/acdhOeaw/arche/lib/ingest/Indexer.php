@@ -532,7 +532,7 @@ class Indexer {
     private function listFiles(SplFileInfo $dir, int $level): array {
         $iter  = new DirectoryIterator($dir->getPathname());
         $files = [];
-        foreach ($iter as $file) {
+        foreach ($iter as $n => $file) {
             if ($file->isFile()) {
                 $filterMatch = empty($this->filter) || preg_match($this->filter, $file->getFilename());
                 $filterSkip  = empty($this->filterNot) || !preg_match($this->filterNot, $file->getFilename());
@@ -543,7 +543,7 @@ class Indexer {
                 $files = array_merge($files, $this->listFiles($file, $level + 1));
             }
         }
-        if (!$this->flatStructure && $level > 0 && (count($files) > 0 || $this->includeEmpty)) {
+        if (!$this->flatStructure && $level > 0 && ($n > 0 || $this->includeEmpty)) {
             $files[] = $this->createFile($dir->getFileInfo());
         }
         return $files;
