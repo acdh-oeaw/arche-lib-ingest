@@ -42,6 +42,7 @@ use acdhOeaw\arche\lib\Schema;
 use acdhOeaw\arche\lib\ingest\util\ProgressMeter;
 use acdhOeaw\arche\lib\ingest\metaLookup\MetaLookupConstant;
 use acdhOeaw\arche\lib\ingest\metaLookup\MetaLookupInterface;
+use acdhOeaw\arche\lib\ingest\metaLookup\MetaLookupException;
 
 /**
  * Ingests files into the repository
@@ -70,7 +71,7 @@ class Indexer {
     /**
      * Turns debug messages on
      */
-    static public bool $debug = true;
+    static public bool $debug = false;
 
     /**
      * Detected operating system path enconding.
@@ -494,10 +495,7 @@ class Indexer {
         }
 
         // ingest
-        $f = function (File $file) use ($meterId, $pidPass) {
-            $promise = $file->uploadAsync($this->uploadSizeLimit, $this->skipMode, $this->versioningMode, $pidPass, $meterId);
-            return $promise->wait();
-        };
+        $f           = fn(File $file) => $file->uploadAsync($this->uploadSizeLimit, $this->skipMode, $this->versioningMode, $pidPass, $meterId);
         $allRepoRes  = [];
         $errorsCount = 0;
         $chunkSize   = $this->autoCommit > 0 ? $this->autoCommit : count($filesToImport);
@@ -511,8 +509,7 @@ class Indexer {
             $chunkRepoRes = $this->repo->map($chunk, $f, $concurrency, $mapErrorMode);
             foreach ($chunkRepoRes as $j) {
                 $errorsCount += (int) ($j instanceof Exception);
-                // get rid of files skipped by the skipMode rule
-                if ($j !== null) {
+                if (!($j instanceof SkippedException)) {
                     $allRepoRes[] = $j;
                 }
             }
@@ -537,14 +534,22 @@ class Indexer {
                 $filterMatch = empty($this->filter) || preg_match($this->filter, $file->getFilename());
                 $filterSkip  = empty($this->filterNot) || !preg_match($this->filterNot, $file->getFilename());
                 if ($filterMatch && $filterSkip) {
-                    $files[] = $this->createFile($file->getFileInfo());
+                    try {
+                        $files[] = $this->createFile($file->getFileInfo());
+                    } catch (MetaLookupException) {
+                        
+                    }
                 }
             } elseif ($file->isDir() && !$file->isDot() && $level < $this->depth) {
                 $files = array_merge($files, $this->listFiles($file, $level + 1));
             }
         }
-        if (!$this->flatStructure && $level > 0 && ($n > 0 || $this->includeEmpty)) {
-            $files[] = $this->createFile($dir->getFileInfo());
+        if (!$this->flatStructure && $level > 0 && (($n ?? 0) > 0 || $this->includeEmpty)) {
+            try {
+                $files[] = $this->createFile($dir->getFileInfo());
+            } catch (MetaLookupException) {
+                
+            }
         }
         return $files;
     }
@@ -588,6 +593,8 @@ class Indexer {
         }
         // normalize ids
         $this->uriNorm->normalizeMeta($extMeta);
+
+        $extMeta->addLiteral($schema->label, 'foo', 'und'); //TODO
 
         return new File($file, $extMeta, $this->repo);
     }

@@ -31,11 +31,11 @@ use RuntimeException;
 use SplFileInfo;
 use EasyRdf\Resource;
 use GuzzleHttp\Promise\PromiseInterface;
-use GuzzleHttp\Promise\RejectedPromise;
 use acdhOeaw\arche\lib\BinaryPayload;
 use acdhOeaw\arche\lib\Repo;
 use acdhOeaw\arche\lib\RepoResource;
 use acdhOeaw\arche\lib\exception\NotFound;
+use acdhOeaw\arche\lib\ingest\SkippedException;
 use acdhOeaw\arche\lib\ingest\util\ProgressMeter;
 use acdhOeaw\arche\lib\ingest\util\UUID;
 use acdhOeaw\arche\lib\promise\RepoResourcePromise;
@@ -72,12 +72,12 @@ class File {
      * @param int $skipMode
      * @param int $versioning
      * @param string|null $meterId
-     * @return RepoResource
+     * @return RepoResource | SkippedException
      */
     public function upload(int $sizeLimit = -1,
                            int $skipMode = Indexer::SKIP_NONE,
                            int $versioning = Indexer::VERSIONING_NONE,
-                           bool $pidPass = false, ?string $meterId = null): RepoResource {
+                           bool $pidPass = false, ?string $meterId = null): RepoResource | SkippedException {
         return $this->uploadAsync($sizeLimit, $skipMode, $versioning, $pidPass, $meterId = null)->wait();
     }
 
@@ -93,12 +93,12 @@ class File {
      *   Indexer::VERSIONING_ALWAYS
      * @param ?string $meterId identifier of the progress meter (if null, no
      *   progress information is displayed)
-     * @return RepoResourcePromise
+     * @return PromiseInterface
      */
     public function uploadAsync(int $sizeLimit = -1,
                                 int $skipMode = Indexer::SKIP_NONE,
                                 int $versioning = Indexer::VERSIONING_NONE,
-                                bool $pidPass = false, ?string $meterId = null): RepoResourcePromise {
+                                bool $pidPass = false, ?string $meterId = null): PromiseInterface {
         // to make it easy to populate the whole required context trough promises
         $this->n          = ProgressMeter::increment($meterId);
         $this->sizeLimit  = $sizeLimit;
@@ -106,13 +106,13 @@ class File {
         $this->versioning = $this->info->isDir() ? Indexer::VERSIONING_NONE : $versioning;
         $this->pidPass    = $pidPass;
         $this->meterId    = $meterId;
-
+        
         $promise = $this->repo->getResourceByIdsAsync($this->getIds());
         $promise = $promise->then(function (RepoResource $repoRes) {
             $skip = $this->skipMode === Indexer::SKIP_EXIST || ($this->skipMode === Indexer::SKIP_BINARY_EXIST && $repoRes->hasBinaryContent());
             if ($skip) {
                 echo ProgressMeter::format($this->meterId, $this->n, "Processing " . $this->info->getPathname() . " ({n}/{t} {p}%): skip\n");
-                return new RejectedPromise(Indexer::SKIP_EXIST);
+                return new SkippedException();
             }
             $this->repoRes = $repoRes;
             if ($this->versioning !== Indexer::VERSIONING_NONE) {
@@ -125,14 +125,14 @@ class File {
                 throw $error;
             }
             if ($this->skipMode === Indexer::SKIP_NOT_EXIST) {
-                return new RejectedPromise(Indexer::SKIP_NOT_EXIST);
+                return new SkippedException();
             }
             return $this->createAsync();
         });
-        return new RepoResourcePromise($promise);
+        return $promise;
     }
 
-    private function versioningAsync(): RepoResource | PromiseInterface {
+    private function versioningAsync(): RepoResourcePromise | RepoResource {
         $schema = $this->repo->getSchema();
 
         // check if new version is needed
@@ -199,10 +199,10 @@ class File {
         if ($promise === null) {
             return $this->createAsync();
         }
-        return $promise->then(fn() => $this->createAsync());
+        return new RepoResourcePromise($promise->then(fn() => $this->createAsync()));
     }
 
-    private function updateAsync(bool $skipUpload = false): RepoResource | PromiseInterface {
+    private function updateAsync(bool $skipUpload = false): RepoResourcePromise | RepoResource {
         $binary = $this->getBinaryData($skipUpload);
         $upload = $binary !== null ? '+ upload ' : '';
         echo ProgressMeter::format($this->meterId, $this->n, "Processing " . $this->info->getPathname() . " ({n}/{t} {p}%): update $upload " . $this->repoRes->getUri() . "\n");
@@ -220,10 +220,10 @@ class File {
         if ($promise === null) {
             return $this->repoRes;
         }
-        return $promise->then(fn() => $this->repoRes);
+        return new RepoResourcePromise($promise->then(fn() => $this->repoRes));
     }
 
-    private function createAsync(): PromiseInterface {
+    private function createAsync(): RepoResourcePromise {
         $upload = $this->withinSizeLimit() ? '+ upload ' : '';
         echo ProgressMeter::format($this->meterId, $this->n, "Processing " . $this->info->getPathname() . " ({n}/{t} {p}%): create $upload\n");
 

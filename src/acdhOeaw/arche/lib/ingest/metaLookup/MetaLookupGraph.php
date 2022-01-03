@@ -82,7 +82,7 @@ class MetaLookupGraph implements MetaLookupInterface {
                                 bool $require = false): Resource {
         $candidates = [];
         foreach ($identifiers as $id) {
-            foreach ($this->graph->resourcesMatching($this->idProp, $id) as $i) {
+            foreach ($this->graph->resourcesMatching($this->idProp, $this->graph->resource($id)) as $i) {
                 $candidates[$i->getUri()] = $i;
             }
         }

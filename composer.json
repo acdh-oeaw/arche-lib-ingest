@@ -11,11 +11,11 @@
         }
     ],
     "require": {
-        "php": ">=8",
+        "php": ">=8 <=8.1",
         "guzzlehttp/guzzle": "^7",
-        "acdh-oeaw/arche-lib": "^4.0.0-beta",
-        "acdh-oeaw/easyrdf": ">=0.13.3",
-        "acdh-oeaw/uri-normalizer": "*",
+        "acdh-oeaw/arche-lib": "^4.0.0-RC11",
+        "acdh-oeaw/easyrdf": ">=0.13.5",
+        "acdh-oeaw/uri-normalizer": "^1",
         "zozlak/rdf-constants": "^1.1"
     },
     "autoload": {
