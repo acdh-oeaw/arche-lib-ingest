@@ -29,6 +29,7 @@ namespace acdhOeaw\arche\lib\ingest;
 use Exception;
 use RuntimeException;
 use BadMethodCallException;
+use Throwable;
 use DirectoryIterator;
 use SplFileInfo;
 use EasyRdf\Graph;
@@ -477,6 +478,7 @@ class Indexer {
      * @param int $concurrency number of parallel requests to the repository
      *   allowed during the import
      * @return array<RepoResource|ClientException> a list RepoResource objects representing indexed resources
+     * @throws IndexerException
      */
     public function import(string $errorMode = self::ERRMODE_FAIL,
                            int $concurrency = 3): array {
@@ -486,7 +488,6 @@ class Indexer {
         $mapErrorMode = $errorMode === self::ERRMODE_FAIL ? Repo::REJECT_FAIL : Repo::REJECT_INCLUDE;
         $pidPass      = $this->pidPass === self::PID_PASS;
 
-        echo "\n";
         // gather files from the filesystem
         $filesToImport = $this->listFiles(new SplFileInfo($this->directory), 0);
         $meterId       = self::$debug ? (string) microtime(true) : null;
@@ -505,17 +506,25 @@ class Indexer {
                 $this->repo->commit();
                 $this->repo->begin();
             }
-            $chunk        = array_slice($filesToImport, $i, $chunkSize);
-            $chunkRepoRes = $this->repo->map($chunk, $f, $concurrency, $mapErrorMode);
-            foreach ($chunkRepoRes as $j) {
-                $errorsCount += (int) ($j instanceof Exception);
+            $chunk = array_slice($filesToImport, $i, $chunkSize);
+            try {
+                $chunkRepoRes = $this->repo->map($chunk, $f, $concurrency, $mapErrorMode);
+            } catch (Throwable $e) {
+                throw new IndexerException($e->getMessage(), $e->getCode(), $e, $allRepoRes);
+            }
+            foreach ($chunkRepoRes as $n => $j) {
+                if ($j instanceof Exception) {
+                    $errorsCount++;
+                    $error = (string) ($j instanceof ClientException ? $j->getResponse()->getBody() : $j->getMessage());
+                    echo self::$debug ? "  Error while processing " . $chunk[$n]->getPath() . ": $error\n" : '';
+                }
                 if (!($j instanceof SkippedException)) {
                     $allRepoRes[] = $j;
                 }
             }
         }
         if ($errorsCount > 0 && $errorMode === self::ERRMODE_PASS) {
-            throw new IndexerException('There was at least one error during the import');
+            throw new IndexerException('There was at least one error during the import', 1, null, $allRepoRes);
         }
         return $allRepoRes;
     }

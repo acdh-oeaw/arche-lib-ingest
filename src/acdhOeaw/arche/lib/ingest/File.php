@@ -106,7 +106,7 @@ class File {
         $this->versioning = $this->info->isDir() ? Indexer::VERSIONING_NONE : $versioning;
         $this->pidPass    = $pidPass;
         $this->meterId    = $meterId;
-        
+
         $promise = $this->repo->getResourceByIdsAsync($this->getIds());
         $promise = $promise->then(function (RepoResource $repoRes) {
             $skip = $this->skipMode === Indexer::SKIP_EXIST || ($this->skipMode === Indexer::SKIP_BINARY_EXIST && $repoRes->hasBinaryContent());
@@ -130,6 +130,10 @@ class File {
             return $this->createAsync();
         });
         return $promise;
+    }
+
+    public function getPath(): string {
+        return $this->info->getPathname();
     }
 
     private function versioningAsync(): RepoResourcePromise | RepoResource {
