@@ -26,14 +26,15 @@
 
 namespace acdhOeaw\arche\lib\ingest;
 
+use Exception;
 use InvalidArgumentException;
+use GuzzleHttp\Promise\RejectedPromise;
 use GuzzleHttp\Exception\ClientException;
 use EasyRdf\Graph;
 use EasyRdf\Resource;
 use acdhOeaw\arche\lib\Repo;
 use acdhOeaw\arche\lib\RepoResource;
-use acdhOeaw\arche\lib\exception\NotFound;
-use acdhOeaw\arche\lib\exception\AmbiguousMatch;
+use acdhOeaw\arche\lib\exception\Conflict;
 use acdhOeaw\UriNormalizer;
 
 /**
@@ -43,10 +44,11 @@ use acdhOeaw\UriNormalizer;
  */
 class MetadataCollection extends Graph {
 
-    const SKIP         = 1;
-    const CREATE       = 2;
-    const ERRMODE_FAIL = 'fail';
-    const ERRMODE_PASS = 'pass';
+    const SKIP            = 1;
+    const CREATE          = 2;
+    const ERRMODE_FAIL    = 'fail';
+    const ERRMODE_PASS    = 'pass';
+    const ERRMODE_INCLUDE = 'include';
 
     /**
      * Turns debug messages on
@@ -87,11 +89,6 @@ class MetadataCollection extends Graph {
     private int $autoCommit = 0;
 
     /**
-     * Used to determine when the autocommit should tak place
-     */
-    private int $autoCommitCounter = 0;
-
-    /**
      * Is the metadata graph preprocessed already?
      */
     private bool $preprocessed = false;
@@ -99,7 +96,7 @@ class MetadataCollection extends Graph {
     /**
      * Creates a new metadata parser.
      * 
-     * @param Fedora $repo
+     * @param Repo $repo
      * @param string $file
      * @param string $format
      */
@@ -170,16 +167,17 @@ class MetadataCollection extends Graph {
      * Imports the whole graph by looping over all resources.
      * 
      * A repository resource is created for every node containing at least one 
-     * cfg:fedoraIdProp property and:
-     * - containg at least one other property
+     * identifer and:
+     * - with at least one outgoing edge (there's at least one triple having
+     *   the node as a subject) of property other than identifier property
      * - or being within $namespace
      * - or when $singleOutNmsp equals to MetadataCollection::CREATE
      * 
-     * Resources without cfg:fedoraIdProp property are skipped as we are unable
+     * Resources without identifier property are skipped as we are unable
      * to identify them on the next import (which would lead to duplication).
      * 
      * Resource with a fully qualified URI is considered as having
-     * cfg:fedoraIdProp (its URI is taken as cfg:fedoraIdProp property value).
+     * the identifier property value (its URI is promoted to it).
      * 
      * Resources in the graph can denote relationships in any way but all
      * object URIs already existing in the repository and all object URIs in the
@@ -190,83 +188,114 @@ class MetadataCollection extends Graph {
      * @param int $singleOutNmsp should repository resources be created
      *   representing URIs outside $namespace (MetadataCollection::SKIP or
      *   MetadataCollection::CREATE)
-     * @param string $errorMode should single resource ingestion error break the
-     *   import? (MetadataCollection::ERRMODE_FAIL or 
-     *   MetadataCollection::ERRMODE_PASS) In the ERRMODE_PASS mode the first
-     *   encountered error turns off the autocomit and causes an error to be
-     *   thrown at the end of the import.
-     * @return array<RepoResource>
+     * @param string $errorMode what should happen if an error is encountered?
+     *   One of:
+     *   - MetadataCollection::ERRMODE_FAIL - the first encountered error throws
+     *     an exception.
+     *   - MetadataCollection::ERRMODE_PASS - the first encountered error turns 
+     *     off the autocommit but ingestion is continued. When all resources are 
+     *     processed and there was no errors, an array of RepoResource objects 
+     *     is returned. If there was an error, an exception is thrown.
+     *   - MetadataCollection::ERRMODE_INCLUDE - the first encountered error 
+     *     turns off the autocommit but ingestion is continued. The returned 
+     *     array contains RepoResource objects for successful ingestions and
+     *     Exception objects for failed ones.
+     * @param int $concurrency number of parallel requests to the repository
+     *   allowed during the import
+     * @return array<RepoResource|ClientException>
      * @throws InvalidArgumentException
+     * @throws IndexerException
+     * @throws ClientException
      */
     public function import(string $namespace, int $singleOutNmsp,
-                           string $errorMode = self::ERRMODE_FAIL): array {
+                           string $errorMode = self::ERRMODE_FAIL,
+                           int $concurrency = 3): array {
         $idProp = $this->repo->getSchema()->id;
 
         $dict = [self::SKIP, self::CREATE];
         if (!in_array($singleOutNmsp, $dict)) {
             throw new InvalidArgumentException('singleOutNmsp parameters must be one of MetadataCollection::SKIP, MetadataCollection::CREATE');
         }
-        if (!in_array($errorMode, [self::ERRMODE_FAIL, self::ERRMODE_PASS])) {
+        if (!in_array($errorMode, [self::ERRMODE_FAIL, self::ERRMODE_PASS, self::ERRMODE_INCLUDE])) {
             throw new InvalidArgumentException('errorMode parameters must be one of MetadataCollection::ERRMODE_FAIL and MetadataCollection::ERRMODE_PASS');
         }
-        $errorCount              = 0;
-        $this->autoCommitCounter = 0;
 
         if (!$this->preprocessed) {
             $this->preprocess();
         }
         $toBeImported = $this->filterResources($namespace, $singleOutNmsp);
 
-        $repoResources = [];
-        foreach ($toBeImported as $n => $res) {
-            $uri = $res->getUri();
+        $mapErrorMode = $errorMode === self::ERRMODE_FAIL ? Repo::REJECT_FAIL : Repo::REJECT_INCLUDE;
 
-            echo self::$debug ? "Importing " . $uri . " (" . ($n + 1) . "/" . count($toBeImported) . ")\n" : "";
+        // The only possible way of performing an atomic "check if resources exists and create it if not"
+        // is to try to create it, therefore the algorithm goes as follows:
+        // - [promise1] try to create the resource
+        //   - if it succeeded, just return the repo resource
+        //   - if it failed check the reason
+        //     - if it's something other than primary key violation, return a RejectedPromise
+        //       (which will be handled accordingly to the $mapErrorMode
+        //     - it it's primary key violation such a resource exists already so:
+        //       - [promise2] find it
+        //         - [promise3] update its metadata
+        $N = count($toBeImported);
+        $n = 0;
+        $f = function (Resource $res, Repo $repo) use (&$n, $N, $idProp) {
+            $n++;
+            $uri = $res->getUri();
+            echo self::$debug ? "Importing " . $uri . " ($n/$N)\n" : "";
             $this->sanitizeResource($res);
 
-            $error = null;
-            try {
-                try {
-                    $ids = array_map(function($x) {
+            $promise1 = $this->repo->createResourceAsync($res);
+            $promise1 = $promise1->then(
+                function (RepoResource $repoRes) use ($n, $N) {
+                    echo self::$debug ? "\tcreated " . $repoRes->getUri() . " ($n/$N)\n" : "";
+                    return $repoRes;
+                }
+            );
+            $promise1 = $promise1->otherwise(
+                function ($reason) use ($res, $idProp, $n, $N) {
+                    if (!($reason instanceof Conflict)) {
+                        return new RejectedPromise($reason);
+                    }
+                    $ids = array_map(function ($x) {
                         return (string) $x;
                     }, $res->allResources($idProp));
-                    $repoRes = $this->repo->getResourceByIds($ids);
+                    $promise2 = $this->repo->getResourceByIdsAsync($ids);
+                    $promise2 = $promise2->then(
+                        function (RepoResource $repoRes) use ($res, $n, $N) {
+                            echo self::$debug ? "\tupdating " . $repoRes->getUri() . " ($n/$N)\n" : "";
+                            $repoRes->setMetadata($res);
+                            $promise3 = $repoRes->updateMetadataAsync();
+                            return $promise3 === null ? $repoRes : $promise3->then(fn() => $repoRes);
+                        }
+                    );
+                    return $promise2;
+                }
+            );
+            return $promise1;
+        };
 
-                    echo self::$debug ? "\tupdating " . $repoRes->getUri() . "\n" : "";
-                    $repoRes->setMetadata($res);
-                    $repoRes->updateMetadata();
-                    $repoResources[] = $repoRes;
-                } catch (NotFound $ex) {
-                    $repoRes         = $this->repo->createResource($res);
-                    echo self::$debug ? "\tcreated " . $repoRes->getUri() . "\n" : "";
-                    $repoResources[] = $repoRes;
-                } catch (AmbiguousMatch $ex) {
-                    $error = $ex;
-                }
-
-                $this->handleAutoCommit($errorCount);
-            } catch (ClientException $ex) {
-                $error = $ex;
+        $allRepoRes  = [];
+        $errorsCount = 0;
+        $chunkSize   = $this->autoCommit > 0 ? $this->autoCommit : count($toBeImported);
+        for ($i = 0; $i < count($toBeImported); $i += $chunkSize) {
+            if ($i > 0 && $errorsCount === 0) {
+                echo self::$debug ? "Autocommit\n" : '';
+                $this->repo->commit();
+                $this->repo->begin();
             }
-            if ($error !== null && $errorMode === self::ERRMODE_PASS) {
-                $errorCount++;
-                $msg = $error->getMessage();
-                if ($error instanceof ClientException && $error->getResponse() !== null) {
-                    $msg = (string) $error->getResponse()->getBody();
-                }
-                if (!self::$debug) {
-                    echo "$uri error " . get_class($error) . ": " . $msg . "\n";
-                } else {
-                    echo "\terror " . get_class($error) . ": " . $msg . "\n";
-                }
-            } elseif ($error !== null) {
-                throw $error;
+            $chunk        = array_slice($toBeImported, $i, $chunkSize);
+            $chunkRepoRes = $this->repo->map($chunk, $f, $concurrency, $mapErrorMode);
+            foreach ($chunkRepoRes as $j) {
+                $errorsCount += (int) ($j instanceof Exception);
             }
+            $allRepoRes = array_merge($allRepoRes, $chunkRepoRes);
         }
-        if ($errorCount > 0) {
+        if ($errorsCount > 0 && $errorMode === self::ERRMODE_PASS) {
             throw new IndexerException('There was at least one error during the import');
         }
-        return array_values($repoResources);
+
+        return $allRepoRes;
     }
 
     /**
@@ -276,7 +305,7 @@ class MetadataCollection extends Graph {
      * @param int $singleOutNmsp should repository resources be created
      *   representing URIs outside $namespace (MetadataCollection::SKIP or
      *   MetadataCollection::CREATE)
-     * @return array<RepoResource>
+     * @return array<Resource>
      */
     private function filterResources(string $namespace, int $singleOutNmsp): array {
         $idProp = $this->repo->getSchema()->id;
@@ -396,7 +425,7 @@ class MetadataCollection extends Graph {
     /**
      * Promotes BNodes to their first schema:id and fixes references to them.
      */
-    private function promoteBNodesToUris() {
+    private function promoteBNodesToUris(): void {
         echo self::$debug ? "Promoting BNodes to URIs...\n" : '';
 
         $idProp = $this->repo->getSchema()->id;
@@ -498,19 +527,4 @@ class MetadataCollection extends Graph {
             }
         }
     }
-
-    private function handleAutoCommit(int $errorCount): bool {
-        if ($this->autoCommit > 0 && $errorCount === 0) {
-            $this->autoCommitCounter++;
-            if ($this->autoCommitCounter >= $this->autoCommit) {
-                echo self::$debug ? "Autocommit\n" : '';
-                $this->repo->commit();
-                $this->autoCommitCounter = 0;
-                $this->repo->begin();
-                return true;
-            }
-        }
-        return false;
-    }
-
 }

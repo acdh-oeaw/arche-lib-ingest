@@ -26,6 +26,10 @@
 
 namespace acdhOeaw\arche\lib\ingest\tests;
 
+use GuzzleHttp\Exception\ClientException;
+use acdhOeaw\arche\lib\RepoResource;
+use acdhOeaw\arche\lib\exception\NotFound;
+use acdhOeaw\arche\lib\ingest\IndexerException;
 use acdhOeaw\arche\lib\ingest\MetadataCollection;
 
 /**
@@ -210,8 +214,8 @@ class MetadataCollectionTest extends TestBase {
     /**
      * @group metadataCollection
      */
-    public function testImportErrorMode(): void {
-        self::$test = 'testImportErrorMode';
+    public function testImportWrongErrorMode(): void {
+        self::$test = 'testImportWrongErrorMode';
         
         $graph  = new MetadataCollection(self::$repo, __DIR__ . '/data/basicResources.ttl');
         self::$repo->begin();
@@ -221,4 +225,62 @@ class MetadataCollectionTest extends TestBase {
         $this->noteResources($indRes);
         self::$repo->commit();
     }
+    
+    /**
+     * @group metadataCollection
+     */
+    public function testImportErrorMode(): void {
+        self::$test = 'testImportErrorMode';
+        
+        // ERRMODE_INCLUDE
+        $graph  = new MetadataCollection(self::$repo, __DIR__ . '/data/errmode.ttl');
+        self::$repo->begin();
+        $indRes = $graph->import('https://id.acdh.oeaw.ac.at/', MetadataCollection::SKIP, MetadataCollection::ERRMODE_INCLUDE);
+        self::$repo->rollback();
+        
+        $classes = [];
+        foreach ($indRes as $i) {
+            $classes[] = get_class($i);
+        }
+        $this->assertCount(2, $indRes);
+        $this->assertCount(2, $classes);
+        $this->assertContains(RepoResource::class, $classes);
+        $this->assertContains(ClientException::class, $classes);
+        
+        // ERRMODE_PASS
+        $graph  = new MetadataCollection(self::$repo, __DIR__ . '/data/errmode.ttl');
+        self::$repo->begin();
+        try {
+            $indRes = $graph->import('https://id.acdh.oeaw.ac.at/', MetadataCollection::SKIP, MetadataCollection::ERRMODE_PASS);
+            $this->assertTrue(false);
+        } catch(IndexerException $e) {
+            $this->assertEquals('There was at least one error during the import', $e->getMessage());
+        }
+        $this->assertInstanceOf(RepoResource::class, self::$repo->getResourceById('https://id.acdh.oeaw.ac.at/id1'));
+        try {
+            self::$repo->getResourceById('https://id.acdh.oeaw.ac.at/id2');
+            $this->assertTrue(false);
+        } catch (NotFound $e) {
+            $this->assertTrue(true);
+        }
+        self::$repo->rollback();
+        
+        // ERRMODE_FAIL
+        $graph  = new MetadataCollection(self::$repo, __DIR__ . '/data/errmode.ttl');
+        self::$repo->begin();
+        try {
+            $indRes = $graph->import('https://id.acdh.oeaw.ac.at/', MetadataCollection::SKIP, MetadataCollection::ERRMODE_FAIL);
+            $this->assertTrue(false);
+        } catch(ClientException $e) {
+            $this->assertStringContainsString('Wrong property value', $e->getMessage());
+        }
+        // can't test for resource one as ingestion order is unknown
+        try {
+            self::$repo->getResourceById('https://id.acdh.oeaw.ac.at/id2');
+            $this->assertTrue(false);
+        } catch (NotFound $e) {
+            $this->assertTrue(true);
+        }
+        self::$repo->rollback();
+    }    
 }

@@ -1,0 +1,10 @@
+@prefix acdh: <https://vocabs.acdh.oeaw.ac.at/schema#>.
+@prefix acdhi: <https://id.acdh.oeaw.ac.at/>.
+
+acdhi:id1 
+    acdh:hasIdentifier acdhi:id1 ;
+    acdh:hasTitle      "foo"@en  .
+
+acdhi:id2 
+    acdh:hasIdentifier acdhi:id2 ;
+    acdh:hasDate       "foo"^^<http://www.w3.org/2001/XMLSchema#date> .

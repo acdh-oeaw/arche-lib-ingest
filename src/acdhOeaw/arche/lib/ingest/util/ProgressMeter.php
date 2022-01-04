@@ -3,7 +3,7 @@
 /*
  * The MIT License
  *
- * Copyright 2019 Austrian Centre for Digital Humanities.
+ * Copyright 2021 Austrian Centre for Digital Humanities.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -24,37 +24,38 @@
  * THE SOFTWARE.
  */
 
-namespace acdhOeaw\arche\lib\ingest\metaLookup;
-
-use EasyRdf\Resource;
+namespace acdhOeaw\arche\lib\ingest\util;
 
 /**
- * Returns a fixed set of metadata properties to every file.
- * Particularly useful for testing.
+ * Helper class for displaying progress meter
  *
  * @author zozlak
  */
-class MetaLookupConstant implements MetaLookupInterface {
-
-    private Resource $metadata;
-
-    public function __construct(Resource $res) {
-        $this->metadata = $res;
-    }
+class ProgressMeter {
 
     /**
-     * Searches for metadata of a given file.
-     * @param string $path path to the file (just for conformance with
-     *   the interface, it is not used)
-     * @param array<string> $identifiers file's identifiers (URIs) - just for
-     *   conformance with the interface, they are not used
-     * @param bool $require should error be thrown when no metadata was found
-     *   (not used, this class always returns metadata)
-     * @return \EasyRdf\Resource fetched metadata
-     * @throws MetaLookupException
+     * 
+     * @var array<string, array<int, int>>
      */
-    public function getMetadata(string $path, array $identifiers,
-                                bool $require = false): Resource {
-        return $this->metadata->copy();
+    static private $counters = [];
+
+    static public function init(string $id, int $max): void {
+        self::$counters[$id] = [0, $max];
+    }
+
+    static public function increment(?string $id, string $format = ''): int {
+        if ($id === null) {
+            return 0;
+        }
+        self::$counters[$id][0]++;
+        return self::$counters[$id][0];
+    }
+
+    static public function format(?string $id, ?int $n, string $format): string {
+        if ($id === null) {
+            return '';
+        }
+        $N = self::$counters[$id][1];
+        return str_replace(['{n}', '{t}', '{p}'], [$n, $N, round(100 * $n / $N)], $format);
     }
 }

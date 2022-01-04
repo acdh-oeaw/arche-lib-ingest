@@ -27,7 +27,10 @@
 namespace acdhOeaw\arche\lib\ingest\tests;
 
 use DateTime;
+use GuzzleHttp\Exception\ClientException;
 use acdhOeaw\arche\lib\Repo;
+use acdhOeaw\arche\lib\RepoResource;
+use acdhOeaw\arche\lib\RepoResourceInterface;
 use acdhOeaw\arche\lib\exception\Deleted;
 use acdhOeaw\arche\lib\exception\NotFound;
 
@@ -74,7 +77,9 @@ abstract class TestBase extends \PHPUnit\Framework\TestCase {
         self::$repo->begin();
         foreach ($this->resources as $r) {
             try {
-                $r->delete(true, true, self::$config->schema->parent);
+                if ($r instanceof RepoResourceInterface) {
+                    $r->delete(true, true, self::$config->schema->parent);
+                }
             } catch (Deleted $e) {
                 
             } catch (NotFound $e) {
@@ -87,6 +92,11 @@ abstract class TestBase extends \PHPUnit\Framework\TestCase {
         }
     }
 
+    /**
+     * 
+     * @param array<RepoResource|ClientException> $res
+     * @return void
+     */
     protected function noteResources(array $res): void {
         $this->resources = array_merge($this->resources, array_values($res));
     }
@@ -96,7 +106,8 @@ abstract class TestBase extends \PHPUnit\Framework\TestCase {
     }
 
     protected function noteTime(string $msg = ''): void {
-        $t = round(microtime(true) - $this->time, 6);
+        $t = microtime(true) - $this->time;
+        $t = sprintf("%.6f", $t);
         file_put_contents(__DIR__ . '/time.log', "$t\t$msg\n", \FILE_APPEND);
     }
 }

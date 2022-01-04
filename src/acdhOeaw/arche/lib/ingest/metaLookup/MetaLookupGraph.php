@@ -72,21 +72,17 @@ class MetaLookupGraph implements MetaLookupInterface {
      * Searches for metadata of a given file.
      * @param string $path path to the file (just for conformance with
      *   the interface, it is not used)
-     * @param \EasyRdf\Resource $meta file's metadata 
+     * @param array<string> $identifiers file's identifiers (URIs)
      * @param bool $require should error be thrown when no metadata was found
      *   (when false a resource with no triples is returned)
      * @return \EasyRdf\Resource fetched metadata
      * @throws MetaLookupException
      */
-    public function getMetadata(string $path, Resource $meta,
+    public function getMetadata(string $path, array $identifiers,
                                 bool $require = false): Resource {
-        if ($meta == null) {
-            return(new Graph())->resource('.');
-        }
-
         $candidates = [];
-        foreach ($meta->allResources($this->idProp) as $id) {
-            foreach ($this->graph->resourcesMatching($this->idProp, $id) as $i) {
+        foreach ($identifiers as $id) {
+            foreach ($this->graph->resourcesMatching($this->idProp, $this->graph->resource($id)) as $i) {
                 $candidates[$i->getUri()] = $i;
             }
         }

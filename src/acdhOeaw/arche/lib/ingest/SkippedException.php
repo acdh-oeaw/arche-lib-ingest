@@ -3,7 +3,7 @@
 /*
  * The MIT License
  *
- * Copyright 2019 Austrian Centre for Digital Humanities.
+ * Copyright 2021 zozlak.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -24,37 +24,17 @@
  * THE SOFTWARE.
  */
 
-namespace acdhOeaw\arche\lib\ingest\metaLookup;
+namespace acdhOeaw\arche\lib\ingest;
 
-use EasyRdf\Resource;
+use Exception;
 
 /**
- * Returns a fixed set of metadata properties to every file.
- * Particularly useful for testing.
+ * Exception used to denoted a file has been skipped to to Indexer class
+ * skip rules.
  *
  * @author zozlak
+ * @see Indexer::setSkip()
  */
-class MetaLookupConstant implements MetaLookupInterface {
-
-    private Resource $metadata;
-
-    public function __construct(Resource $res) {
-        $this->metadata = $res;
-    }
-
-    /**
-     * Searches for metadata of a given file.
-     * @param string $path path to the file (just for conformance with
-     *   the interface, it is not used)
-     * @param array<string> $identifiers file's identifiers (URIs) - just for
-     *   conformance with the interface, they are not used
-     * @param bool $require should error be thrown when no metadata was found
-     *   (not used, this class always returns metadata)
-     * @return \EasyRdf\Resource fetched metadata
-     * @throws MetaLookupException
-     */
-    public function getMetadata(string $path, array $identifiers,
-                                bool $require = false): Resource {
-        return $this->metadata->copy();
-    }
+class SkippedException extends Exception {
+    
 }

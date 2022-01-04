@@ -43,24 +43,24 @@ class MetaLookupFile implements MetaLookupInterface {
      * @var bool
      */
     static public $debug = false;
-    
+
     /**
      * Array of possible metadata locations (relative and/or absolute)
-     * @var array
+     * @var array<string>
      */
-    private $locations;
+    private array $locations;
 
     /**
      * Suffix added to a file name to form a metadata file name.
      * @var string
      */
-    private $extension;
+    private string $extension;
 
     /**
      * Metadata file format
-     * @var string
+     * @var ?string
      */
-    private $format;
+    private ?string $format;
 
     /**
      * Creates a new MetaLookupFile instance.
@@ -72,7 +72,8 @@ class MetaLookupFile implements MetaLookupInterface {
      *   \EasyRdf\Graph::parseFile() (if null format will be autodetected)
      */
     public function __construct(array $locations = [],
-                                string $extension = '.ttl', $format = null) {
+                                string $extension = '.ttl',
+                                ?string $format = null) {
         $this->locations = $locations;
         $this->extension = $extension;
         $this->format    = $format;
@@ -81,15 +82,15 @@ class MetaLookupFile implements MetaLookupInterface {
     /**
      * Searches for metadata of a given file.
      * @param string $path path to the file
-     * @param \EasyRdf\Resource $meta file's metadata (just for conformance with
-     *   the interface, they are not used)
+     * @param array<string> $identifiers file's identifiers (URIs) - just for 
+     *   conformance with the interface, they are not used
      * @param bool $require should error be thrown when no metadata was found
      *   (when false a resource with no triples is returned)
      * @return \EasyRdf\Resource fetched metadata
      * @throws \InvalidArgumentException
      * @throws MetaLookupException
      */
-    public function getMetadata(string $path, Resource $meta,
+    public function getMetadata(string $path, array $identifiers,
                                 bool $require = false): Resource {
         if (!file_exists($path)) {
             throw new InvalidArgumentException('no such file');
@@ -103,11 +104,11 @@ class MetaLookupFile implements MetaLookupInterface {
                 $loc = $dir . '/' . $loc;
             }
             $loc = $loc . '/' . $name;
-            
+
             echo self::$debug ? '  trying metadata location ' . $loc . "...\n" : '';
             if (file_exists($loc)) {
                 echo self::$debug ? "    found\n" : '';
-                
+
                 $graph->parseFile($loc, $this->format);
                 $candidates = [];
                 foreach ($graph->resources() as $res) {
@@ -115,12 +116,12 @@ class MetaLookupFile implements MetaLookupInterface {
                         $candidates[] = $res;
                     }
                 }
-                
+
                 if (count($candidates) == 1) {
                     return $candidates[0];
                 } else if (count($candidates) > 1) {
                     throw new MetaLookupException('more then one metadata resource');
-                } else{
+                } else {
                     echo self::$debug ? "      but no metadata inside\n" : '';
                 }
             } else {
@@ -134,5 +135,4 @@ class MetaLookupFile implements MetaLookupInterface {
             return $graph->resource('.');
         }
     }
-
 }
