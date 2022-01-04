@@ -13,15 +13,9 @@
     "require": {
         "php": ">=8 <=8.1",
         "guzzlehttp/guzzle": "^7",
-<<<<<<< HEAD
-        "acdh-oeaw/arche-lib": ">=2.0.4 <5",
-        "acdh-oeaw/easyrdf": ">=0.13.3",
-        "acdh-oeaw/uri-normalizer": "*",
-=======
         "acdh-oeaw/arche-lib": "^4.0.0",
         "acdh-oeaw/easyrdf": ">=0.13.5",
         "acdh-oeaw/uri-normalizer": "^1",
->>>>>>> parallel
         "zozlak/rdf-constants": "^1.1"
     },
     "autoload": {
