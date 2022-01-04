@@ -63,8 +63,7 @@ class IndexerException extends Exception {
      * an error occured.
      * @return array<RepoResource>
      */
-    public function getCommitedResources(): array {
+    public function getProcessedResources(): array {
         return $this->resources;
     }
-
 }

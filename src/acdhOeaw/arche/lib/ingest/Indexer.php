@@ -52,8 +52,8 @@ use acdhOeaw\arche\lib\ingest\metaLookup\MetaLookupException;
  */
 class Indexer {
 
-    const MATCH             = 1;
-    const SKIP              = 2;
+    const FILTER_MATCH      = 1;
+    const FILTER_SKIP       = 2;
     const SKIP_NONE         = 1;
     const SKIP_NOT_EXIST    = 2;
     const SKIP_EXIST        = 3;
@@ -381,12 +381,12 @@ class Indexer {
      *   one of Indexer::MATCH and Indexer::SKIP)
      * @return Indexer
      */
-    public function setFilter(string $filter, int $type = self::MATCH): Indexer {
+    public function setFilter(string $filter, int $type = self::FILTER_MATCH): Indexer {
         switch ($type) {
-            case self::MATCH:
+            case self::FILTER_MATCH:
                 $this->filter    = $filter;
                 break;
-            case self::SKIP:
+            case self::FILTER_SKIP:
                 $this->filterNot = $filter;
                 break;
             default:
@@ -512,7 +512,7 @@ class Indexer {
             } catch (Throwable $e) {
                 throw new IndexerException($e->getMessage(), $e->getCode(), $e, $allRepoRes);
             }
-            foreach ($chunkRepoRes as $n => $j) {
+            foreach ($chunkRepoRes ?? [] as $n => $j) {
                 if ($j instanceof Exception) {
                     $errorsCount++;
                     $error = (string) ($j instanceof ClientException ? $j->getResponse()->getBody() : $j->getMessage());
@@ -602,8 +602,6 @@ class Indexer {
         }
         // normalize ids
         $this->uriNorm->normalizeMeta($extMeta);
-
-        $extMeta->addLiteral($schema->label, 'foo', 'und'); //TODO
 
         return new File($file, $extMeta, $this->repo);
     }

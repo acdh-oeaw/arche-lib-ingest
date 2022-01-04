@@ -281,7 +281,7 @@ class File {
 
         $addLabel = true;
         if (isset($this->repoRes)) {
-            $addLabel = $this->repoRes->getMetadata()->get($labelProp) !== null;
+            $addLabel = $this->repoRes->getMetadata()->get($labelProp) === null;
         }
         if ($addLabel) {
             $this->meta->addLiteral($labelProp, $this->info->getFilename(), 'und');

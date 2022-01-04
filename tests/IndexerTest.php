@@ -27,11 +27,16 @@
 namespace acdhOeaw\arche\lib\ingest\tests;
 
 use EasyRdf\Graph;
+use EasyRdf\Literal;
+use zozlak\RdfConstants as RDF;
+use GuzzleHttp\Exception\ClientException;
 use acdhOeaw\arche\lib\RepoResource;
 use acdhOeaw\arche\lib\exception\NotFound;
 use acdhOeaw\arche\lib\ingest\Indexer;
+use acdhOeaw\arche\lib\ingest\IndexerException;
 use acdhOeaw\arche\lib\ingest\metaLookup\MetaLookupFile;
 use acdhOeaw\arche\lib\ingest\metaLookup\MetaLookupGraph;
+use acdhOeaw\arche\lib\ingest\metaLookup\MetaLookupConstant;
 use acdhOeaw\arche\lib\promise\RepoResourcePromise;
 
 /**
@@ -106,8 +111,8 @@ class IndexerTest extends TestBase {
     public function testSimple(): void {
         self::$test = 'testSimple';
 
-        $this->ind->setFilter('/txt|xml/', Indexer::MATCH);
-        $this->ind->setFilter('/^(skiptest.txt)$/', Indexer::SKIP);
+        $this->ind->setFilter('/txt|xml/', Indexer::FILTER_MATCH);
+        $this->ind->setFilter('/^(skiptest.txt)$/', Indexer::FILTER_SKIP);
         $this->ind->setUploadSizeLimit(0);
         self::$repo->begin();
         $indRes = $this->ind->import(Indexer::ERRMODE_FAIL, 1);
@@ -125,7 +130,7 @@ class IndexerTest extends TestBase {
 
         $this->testSimple();
 
-        $this->ind->setFilter('', Indexer::SKIP);
+        $this->ind->setFilter('', Indexer::FILTER_SKIP);
         $this->ind->setSkip(Indexer::SKIP_NOT_EXIST);
         self::$repo->begin();
         $indRes = $this->ind->import();
@@ -143,7 +148,7 @@ class IndexerTest extends TestBase {
 
         $indRes1 = $indRes2 = [];
 
-        $this->ind->setFilter('/txt/', Indexer::MATCH);
+        $this->ind->setFilter('/txt/', Indexer::FILTER_MATCH);
         self::$repo->begin();
         $indRes1 = $this->ind->import();
         $this->noteResources($indRes1);
@@ -152,7 +157,7 @@ class IndexerTest extends TestBase {
         $this->assertEquals(4, count($indRes1));
 
         $this->ind->setSkip(Indexer::SKIP_EXIST);
-        $this->ind->setFilter('/(txt|xml)$/', Indexer::MATCH);
+        $this->ind->setFilter('/(txt|xml)$/', Indexer::FILTER_MATCH);
         self::$repo->begin();
         $indRes2 = $this->ind->import();
         $this->noteResources($indRes2);
@@ -170,7 +175,7 @@ class IndexerTest extends TestBase {
 
         $indRes1 = $indRes2 = [];
 
-        $this->ind->setFilter('/txt/', Indexer::MATCH);
+        $this->ind->setFilter('/txt/', Indexer::FILTER_MATCH);
         self::$repo->begin();
         $indRes1 = $this->ind->import();
         $this->noteResources($indRes1);
@@ -179,7 +184,7 @@ class IndexerTest extends TestBase {
         $this->assertEquals(4, count($indRes1));
 
         $this->ind->setSkip(Indexer::SKIP_BINARY_EXIST);
-        $this->ind->setFilter('/(txt|xml)$/', Indexer::MATCH);
+        $this->ind->setFilter('/(txt|xml)$/', Indexer::FILTER_MATCH);
         self::$repo->begin();
         $indRes2 = $this->ind->import();
         $this->noteResources($indRes2);
@@ -374,7 +379,7 @@ class IndexerTest extends TestBase {
         $pid     = 'https://sample.pid/' . rand();
 
         $indRes1 = $indRes2 = $indRes3 = [];
-        $this->ind->setFilter('/^sample.xml$/', Indexer::MATCH);
+        $this->ind->setFilter('/^sample.xml$/', Indexer::FILTER_MATCH);
         $this->ind->setFlatStructure(true);
 
         self::$repo->begin();
@@ -421,6 +426,54 @@ class IndexerTest extends TestBase {
         $newMeta    = $newRes->getMetadata();
         $this->assertEquals($pid, (string) $newMeta->getResource($pidProp));
         $this->assertTrue(in_array($pid, $newRes->getIds()));
+    }
+
+    /**
+     * @group indexer
+     */
+    public function testErrMode(): void {
+        self::$test = 'testFailure';
+        $prop       = self::$config->schema->label;
+        self::$repo->begin();
+
+        $meta = (new Graph())->resource('.');
+        $meta->addLiteral($prop, new Literal('foo', null, RDF::XSD_DATE));
+        $this->ind->setMetaLookup(new MetaLookupConstant($meta));
+        $this->ind->setDepth(0);
+        $this->ind->setAutoCommit(2);
+        $this->ind->setFilter('/xml/', Indexer::FILTER_MATCH);
+
+        // ERRMODE_FAIL
+        try {
+            $this->ind->import(Indexer::ERRMODE_FAIL);
+            $this->assertTrue(false);
+        } catch (IndexerException $e) {
+            $this->assertStringContainsString('Wrong property value', $e->getMessage());
+            $this->assertCount(0, $e->getProcessedResources());
+        }
+
+        // ERRMODE_PASS
+        try {
+            $this->ind->import(Indexer::ERRMODE_PASS);
+        } catch (IndexerException $e) {
+            $this->assertEquals('There was at least one error during the import', $e->getMessage());
+            $processed = $e->getProcessedResources();
+            $this->assertCount(3, $processed);
+            foreach ($processed as $i) {
+                $this->assertInstanceOf(ClientException::class, $i);
+                $this->assertStringContainsString('Wrong property value', (string) $i->getResponse()->getBody());
+            }
+        }
+
+        // ERRMODE_INCLUDE
+        $processed = $this->ind->import(Indexer::ERRMODE_INCLUDE);
+        $this->assertCount(3, $processed);
+        foreach ($processed as $i) {
+            $this->assertInstanceOf(ClientException::class, $i);
+            $this->assertStringContainsString('Wrong property value', (string) $i->getResponse()->getBody());
+        }
+
+        self::$repo->rollback();
     }
 
     /**
