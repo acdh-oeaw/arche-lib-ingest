@@ -50,7 +50,7 @@ class MetadataCollectionTest extends TestBase {
      */
     public function testSimple(): void {
         self::$test = 'testSimple';
-        
+
         $graph  = new MetadataCollection(self::$repo, __DIR__ . '/data/graph-small.ttl');
         self::$repo->begin();
         $indRes = $graph->import('https://id.acdh.oeaw.ac.at/', MetadataCollection::SKIP);
@@ -65,7 +65,7 @@ class MetadataCollectionTest extends TestBase {
      */
     public function testSimpleDouble(): void {
         self::$test = 'testSimpleDouble';
-        
+
         $graph   = new MetadataCollection(self::$repo, __DIR__ . '/data/graph-small.ttl');
         self::$repo->begin();
         $indRes1 = $graph->import('https://id.acdh.oeaw.ac.at/', MetadataCollection::SKIP);
@@ -97,7 +97,7 @@ class MetadataCollectionTest extends TestBase {
      */
     public function testLarge(): void {
         self::$test = 'testLarge';
-        
+
         $graph  = new MetadataCollection(self::$repo, __DIR__ . '/data/graph-large.ttl');
         self::$repo->begin();
         $indRes = $graph->import('https://id.acdh.oeaw.ac.at/', MetadataCollection::SKIP);
@@ -112,7 +112,7 @@ class MetadataCollectionTest extends TestBase {
      */
     public function testCycle(): void {
         self::$test = 'testCycle';
-        
+
         $graph  = new MetadataCollection(self::$repo, __DIR__ . '/data/graph-cycle.ttl');
         self::$repo->begin();
         $indRes = $graph->import('http://some.id', MetadataCollection::SKIP);
@@ -127,7 +127,7 @@ class MetadataCollectionTest extends TestBase {
      */
     public function testBNodes(): void {
         self::$test = 'testBNodes';
-        
+
         $graph  = new MetadataCollection(self::$repo, __DIR__ . '/data/bnodes.ttl');
         self::$repo->begin();
         $indRes = $graph->import('https://id.acdh.oeaw.ac.at/', MetadataCollection::SKIP);
@@ -142,7 +142,7 @@ class MetadataCollectionTest extends TestBase {
      */
     public function testAutoRefsCreation(): void {
         self::$test = 'testAutoRefsCreation';
-        
+
         $graph  = new MetadataCollection(self::$repo, __DIR__ . '/data/graph-autorefs.ttl');
         self::$repo->begin();
         $indRes = $graph->import('https://id.acdh.oeaw.ac.at/', MetadataCollection::SKIP);
@@ -157,7 +157,7 @@ class MetadataCollectionTest extends TestBase {
      */
     public function testBasicResources(): void {
         self::$test = 'testBasicResources';
-        
+
         $graph  = new MetadataCollection(self::$repo, __DIR__ . '/data/basicResources.ttl');
         self::$repo->begin();
         $indRes = $graph->import('https://id.acdh.oeaw.ac.at/', MetadataCollection::SKIP);
@@ -186,7 +186,7 @@ class MetadataCollectionTest extends TestBase {
      */
     public function testBig(): void {
         self::$test = 'testBig';
-        
+
         $graph  = new MetadataCollection(self::$repo, __DIR__ . '/data/schnitzler-diaries.rdf');
         self::$repo->begin();
         $indRes = $graph->import('https://id.acdh.oeaw.ac.at/', MetadataCollection::SKIP);
@@ -201,7 +201,7 @@ class MetadataCollectionTest extends TestBase {
      */
     public function testImportSingleOutNmsp(): void {
         self::$test = 'testImportSingleOutNmsp';
-        
+
         $graph  = new MetadataCollection(self::$repo, __DIR__ . '/data/basicResources.ttl');
         self::$repo->begin();
         $this->expectException(\InvalidArgumentException::class);
@@ -216,7 +216,7 @@ class MetadataCollectionTest extends TestBase {
      */
     public function testImportWrongErrorMode(): void {
         self::$test = 'testImportWrongErrorMode';
-        
+
         $graph  = new MetadataCollection(self::$repo, __DIR__ . '/data/basicResources.ttl');
         self::$repo->begin();
         $this->expectException(\InvalidArgumentException::class);
@@ -225,19 +225,19 @@ class MetadataCollectionTest extends TestBase {
         $this->noteResources($indRes);
         self::$repo->commit();
     }
-    
+
     /**
      * @group metadataCollection
      */
     public function testImportErrorMode(): void {
         self::$test = 'testImportErrorMode';
-        
+
         // ERRMODE_INCLUDE
         $graph  = new MetadataCollection(self::$repo, __DIR__ . '/data/errmode.ttl');
         self::$repo->begin();
         $indRes = $graph->import('https://id.acdh.oeaw.ac.at/', MetadataCollection::SKIP, MetadataCollection::ERRMODE_INCLUDE);
         self::$repo->rollback();
-        
+
         $classes = [];
         foreach ($indRes as $i) {
             $classes[] = get_class($i);
@@ -246,15 +246,15 @@ class MetadataCollectionTest extends TestBase {
         $this->assertCount(2, $classes);
         $this->assertContains(RepoResource::class, $classes);
         $this->assertContains(ClientException::class, $classes);
-        
+
         // ERRMODE_PASS
-        $graph  = new MetadataCollection(self::$repo, __DIR__ . '/data/errmode.ttl');
+        $graph = new MetadataCollection(self::$repo, __DIR__ . '/data/errmode.ttl');
         self::$repo->begin();
         try {
             $indRes = $graph->import('https://id.acdh.oeaw.ac.at/', MetadataCollection::SKIP, MetadataCollection::ERRMODE_PASS);
             $this->assertTrue(false);
-        } catch(IndexerException $e) {
-            $this->assertEquals('There was at least one error during the import', $e->getMessage());
+        } catch (IndexerException $e) {
+            $this->assertStringStartsWith('There was at least one error during the import', $e->getMessage());
         }
         $this->assertInstanceOf(RepoResource::class, self::$repo->getResourceById('https://id.acdh.oeaw.ac.at/id1'));
         try {
@@ -264,14 +264,14 @@ class MetadataCollectionTest extends TestBase {
             $this->assertTrue(true);
         }
         self::$repo->rollback();
-        
+
         // ERRMODE_FAIL
-        $graph  = new MetadataCollection(self::$repo, __DIR__ . '/data/errmode.ttl');
+        $graph = new MetadataCollection(self::$repo, __DIR__ . '/data/errmode.ttl');
         self::$repo->begin();
         try {
             $indRes = $graph->import('https://id.acdh.oeaw.ac.at/', MetadataCollection::SKIP, MetadataCollection::ERRMODE_FAIL);
             $this->assertTrue(false);
-        } catch(ClientException $e) {
+        } catch (ClientException $e) {
             $this->assertStringContainsString('Wrong property value', $e->getMessage());
         }
         // can't test for resource one as ingestion order is unknown
@@ -282,5 +282,5 @@ class MetadataCollectionTest extends TestBase {
             $this->assertTrue(true);
         }
         self::$repo->rollback();
-    }    
+    }
 }

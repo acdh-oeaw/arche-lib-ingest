@@ -275,24 +275,31 @@ class MetadataCollection extends Graph {
             return $promise1;
         };
 
-        $allRepoRes  = [];
-        $errorsCount = 0;
-        $chunkSize   = $this->autoCommit > 0 ? $this->autoCommit : count($toBeImported);
+        $allRepoRes = [];
+        $errors     = '';
+        $chunkSize  = $this->autoCommit > 0 ? $this->autoCommit : count($toBeImported);
         for ($i = 0; $i < count($toBeImported); $i += $chunkSize) {
-            if ($i > 0 && $errorsCount === 0) {
+            if ($i > 0 && empty($errors)) {
                 echo self::$debug ? "Autocommit\n" : '';
                 $this->repo->commit();
                 $this->repo->begin();
             }
             $chunk        = array_slice($toBeImported, $i, $chunkSize);
             $chunkRepoRes = $this->repo->map($chunk, $f, $concurrency, $mapErrorMode);
-            foreach ($chunkRepoRes as $j) {
-                $errorsCount += (int) ($j instanceof Exception);
+            foreach ($chunkRepoRes as $n => $j) {
+                if ($j instanceof Exception) {
+                    $msg    = $j instanceof ClientException ? $j->getResponse()->getBody() : $j->getMessage();
+                    $msg    = $chunk[$n]->getUri() . ": " . $msg;
+                    $errors .= "\t$msg\n";
+                    if (self::$debug) {
+                        echo "\tERROR while processing $msg\n";
+                    }
+                }
             }
             $allRepoRes = array_merge($allRepoRes, $chunkRepoRes);
         }
-        if ($errorsCount > 0 && $errorMode === self::ERRMODE_PASS) {
-            throw new IndexerException('There was at least one error during the import');
+        if (!empty($errors) && $errorMode === self::ERRMODE_PASS) {
+            throw new IndexerException("There was at least one error during the import:\n.$errors", IndexerException::ERROR_DURING_IMPORT);
         }
 
         return $allRepoRes;

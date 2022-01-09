@@ -524,7 +524,7 @@ class Indexer {
             }
         }
         if ($errorsCount > 0 && $errorMode === self::ERRMODE_PASS) {
-            throw new IndexerException('There was at least one error during the import', 1, null, $allRepoRes);
+            throw new IndexerException('There was at least one error during the import', IndexerException::ERROR_DURING_IMPORT, null, $allRepoRes);
         }
         return $allRepoRes;
     }

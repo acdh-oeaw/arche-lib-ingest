@@ -38,6 +38,8 @@ use acdhOeaw\arche\lib\RepoResource;
  */
 class IndexerException extends Exception {
 
+    const ERROR_DURING_IMPORT = 1;
+    
     /**
      * A collection of already processed resources
      * @var array<RepoResource>
