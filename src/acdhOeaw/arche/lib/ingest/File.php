@@ -31,10 +31,12 @@ use RuntimeException;
 use SplFileInfo;
 use EasyRdf\Resource;
 use GuzzleHttp\Promise\PromiseInterface;
+use GuzzleHttp\Promise\RejectedPromise;
 use acdhOeaw\arche\lib\BinaryPayload;
 use acdhOeaw\arche\lib\Repo;
 use acdhOeaw\arche\lib\RepoResource;
 use acdhOeaw\arche\lib\exception\NotFound;
+use acdhOeaw\arche\lib\exception\Conflict;
 use acdhOeaw\arche\lib\ingest\SkippedException;
 use acdhOeaw\arche\lib\ingest\util\ProgressMeter;
 use acdhOeaw\arche\lib\ingest\util\UUID;
@@ -57,6 +59,7 @@ class File {
     private bool $pidPass;
     private ?string $meterId;
     private RepoResource $repoRes;
+    private int $uploadsCount = 0;
 
     public function __construct(SplFileInfo $fileInfo, Resource $meta,
                                 Repo $repo) {
@@ -99,6 +102,7 @@ class File {
                                 int $skipMode = Indexer::SKIP_NONE,
                                 int $versioning = Indexer::VERSIONING_NONE,
                                 bool $pidPass = false, ?string $meterId = null): PromiseInterface {
+        $this->uploadsCount++;
         // to make it easy to populate the whole required context trough promises
         $this->n          = ProgressMeter::increment($meterId);
         $this->sizeLimit  = $sizeLimit;
@@ -136,6 +140,10 @@ class File {
         return $this->info->getPathname();
     }
 
+    public function getUploadsCount(): int {
+        return $this->uploadsCount;
+    }
+    
     private function versioningAsync(): RepoResourcePromise | RepoResource {
         $schema = $this->repo->getSchema();
 

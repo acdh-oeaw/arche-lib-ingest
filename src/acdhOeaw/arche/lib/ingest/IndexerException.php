@@ -61,11 +61,11 @@ class IndexerException extends Exception {
     }
 
     /**
-     * Returns the collection of resources which were already processed when
+     * Returns the collection of resources which were already commited when
      * an error occured.
      * @return array<RepoResource>
      */
-    public function getProcessedResources(): array {
+    public function getCommitedResources(): array {
         return $this->resources;
     }
 }

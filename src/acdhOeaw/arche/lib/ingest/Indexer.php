@@ -26,7 +26,6 @@
 
 namespace acdhOeaw\arche\lib\ingest;
 
-use Exception;
 use RuntimeException;
 use BadMethodCallException;
 use Throwable;
@@ -40,6 +39,7 @@ use acdhOeaw\arche\lib\BinaryPayload;
 use acdhOeaw\arche\lib\Repo;
 use acdhOeaw\arche\lib\RepoResource;
 use acdhOeaw\arche\lib\Schema;
+use acdhOeaw\arche\lib\exception\Conflict;
 use acdhOeaw\arche\lib\ingest\util\ProgressMeter;
 use acdhOeaw\arche\lib\ingest\metaLookup\MetaLookupConstant;
 use acdhOeaw\arche\lib\ingest\metaLookup\MetaLookupInterface;
@@ -477,16 +477,17 @@ class Indexer {
      *     Exception objects for failed ones.
      * @param int $concurrency number of parallel requests to the repository
      *   allowed during the import
+     * @param int $retriesOnConflict how many ingestion attempts should be taken
+     *   if the repository resource is locked by other request
      * @return array<RepoResource|ClientException> a list RepoResource objects representing indexed resources
      * @throws IndexerException
      */
     public function import(string $errorMode = self::ERRMODE_FAIL,
-                           int $concurrency = 3): array {
+                           int $concurrency = 3, int $retriesOnConflict = 3): array {
         if (!isset($this->repo)) {
             throw new IndexerException("Repository connection object isn't set. Call setRepo() or setParent() first or pass the Repo object to the constructor.");
         }
-        $mapErrorMode = $errorMode === self::ERRMODE_FAIL ? Repo::REJECT_FAIL : Repo::REJECT_INCLUDE;
-        $pidPass      = $this->pidPass === self::PID_PASS;
+        $pidPass = $this->pidPass === self::PID_PASS;
 
         // gather files from the filesystem
         $filesToImport = $this->listFiles(new SplFileInfo($this->directory), 0);
@@ -496,35 +497,47 @@ class Indexer {
         }
 
         // ingest
-        $f           = fn(File $file) => $file->uploadAsync($this->uploadSizeLimit, $this->skipMode, $this->versioningMode, $pidPass, $meterId);
-        $allRepoRes  = [];
-        $errorsCount = 0;
-        $chunkSize   = $this->autoCommit > 0 ? $this->autoCommit : count($filesToImport);
+        $f               = fn(File $file) => $file->uploadAsync($this->uploadSizeLimit, $this->skipMode, $this->versioningMode, $pidPass, $meterId);
+        $allRepoRes      = [];
+        $commitedRepoRes = [];
+        $errors          = '';
+        $chunkSize       = $this->autoCommit > 0 ? $this->autoCommit : count($filesToImport);
         for ($i = 0; $i < count($filesToImport); $i += $chunkSize) {
-            if ($i > 0 && $errorsCount === 0) {
+            if ($this->autoCommit > 0 && $i > 0 && count($filesToImport) > $this->autoCommit && empty($errors)) {
                 echo self::$debug ? "Autocommit\n" : '';
+                $commitedRepoRes = $allRepoRes;
                 $this->repo->commit();
                 $this->repo->begin();
             }
-            $chunk = array_slice($filesToImport, $i, $chunkSize);
-            try {
-                $chunkRepoRes = $this->repo->map($chunk, $f, $concurrency, $mapErrorMode);
-            } catch (Throwable $e) {
-                throw new IndexerException($e->getMessage(), $e->getCode(), $e, $allRepoRes);
-            }
+            $chunk        = array_slice($filesToImport, $i, $chunkSize);
+            $chunkSize    = min($chunkSize, count($chunk)); // not to loose repeating reinjections
+            $chunkRepoRes = $this->repo->map($chunk, $f, $concurrency, Repo::REJECT_INCLUDE);
             foreach ($chunkRepoRes ?? [] as $n => $j) {
-                if ($j instanceof Exception) {
-                    $errorsCount++;
-                    $error = (string) ($j instanceof ClientException ? $j->getResponse()->getBody() : $j->getMessage());
-                    echo self::$debug ? "  Error while processing " . $chunk[$n]->getPath() . ": $error\n" : '';
+                if ($j instanceof SkippedException) {
+                    continue;
                 }
-                if (!($j instanceof SkippedException)) {
+                // handle reingestion on "HTTP 409 Conflict"
+                if ($j instanceof Conflict && preg_match('/Resource [0-9]+ locked|Owned by other request|Lock not available|duplicate key value/', $j->getMessage())) {
+                    if ($chunk[$n]->getUploadsCount() <= $retriesOnConflict + 1) {
+                        $filesToImport[] = $chunk[$n];
+                        continue;
+                    }
+                }
+                if ($j instanceof Throwable && $errorMode === self::ERRMODE_FAIL) {
+                    throw new IndexerException("Error during import", IndexerException::ERROR_DURING_IMPORT, $j, $commitedRepoRes);
+                } elseif ($j instanceof Throwable) {
+                    $msg    = $j instanceof ClientException ? $j->getResponse()->getBody() : $j->getMessage();
+                    $msg    = $chunk[$n]->getPath() . ": " . $msg;
+                    $errors .= "\t$msg\n";
+                    echo self::$debug ? "\tERROR while processing " . $chunk[$n]->getPath() . ": $msg\n" : '';
+                }
+                if ($j instanceof RepoResource || $errorMode === self::ERRMODE_INCLUDE) {
                     $allRepoRes[] = $j;
                 }
             }
         }
-        if ($errorsCount > 0 && $errorMode === self::ERRMODE_PASS) {
-            throw new IndexerException('There was at least one error during the import', IndexerException::ERROR_DURING_IMPORT, null, $allRepoRes);
+        if (!empty($errors) && $errorMode === self::ERRMODE_PASS) {
+            throw new IndexerException("There was at least one error during the import:\n.$errors", IndexerException::ERROR_DURING_IMPORT, null, $commitedRepoRes);
         }
         return $allRepoRes;
     }

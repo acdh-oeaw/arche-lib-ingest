@@ -32,12 +32,12 @@ use zozlak\RdfConstants as RDF;
 use GuzzleHttp\Exception\ClientException;
 use acdhOeaw\arche\lib\RepoResource;
 use acdhOeaw\arche\lib\exception\NotFound;
+use acdhOeaw\arche\lib\exception\Conflict;
 use acdhOeaw\arche\lib\ingest\Indexer;
 use acdhOeaw\arche\lib\ingest\IndexerException;
 use acdhOeaw\arche\lib\ingest\metaLookup\MetaLookupFile;
 use acdhOeaw\arche\lib\ingest\metaLookup\MetaLookupGraph;
 use acdhOeaw\arche\lib\ingest\metaLookup\MetaLookupConstant;
-use acdhOeaw\arche\lib\promise\RepoResourcePromise;
 
 /**
  * Description of IndexerTest
@@ -53,9 +53,9 @@ class IndexerTest extends TestBase {
     static public function setUpBeforeClass(): void {
         parent::setUpBeforeClass();
 
-//        MetaLookupFile::$debug                               = true;
-//        MetaLookupGraph::$debug                              = true;
-//        Indexer::$debug             = true;
+//        MetaLookupFile::$debug  = true;
+//        MetaLookupGraph::$debug = true;
+//        Indexer::$debug         = true;
 
         self::$repo->begin();
         $id = 'http://my.test/id';
@@ -113,9 +113,8 @@ class IndexerTest extends TestBase {
 
         $this->ind->setFilter('/txt|xml/', Indexer::FILTER_MATCH);
         $this->ind->setFilter('/^(skiptest.txt)$/', Indexer::FILTER_SKIP);
-        $this->ind->setUploadSizeLimit(0);
         self::$repo->begin();
-        $indRes = $this->ind->import(Indexer::ERRMODE_FAIL, 1);
+        $indRes = $this->ind->import(Indexer::ERRMODE_FAIL);
         $this->noteResources($indRes);
         self::$repo->commit();
 
@@ -357,6 +356,50 @@ class IndexerTest extends TestBase {
     /**
      * @group indexer
      */
+    public function testConflict1(): void {
+        self::$test = 'testConflict1';
+
+        $meta = (new Graph())->resource('.');
+        $meta->addResource(self::$config->schema->id, 'http://foo/' . rand());
+
+        $this->ind->setFilter('/txt|xml/', Indexer::FILTER_MATCH);
+        $this->ind->setFlatStructure(true);
+        $this->ind->setMetaLookup(new MetaLookupConstant($meta));
+        self::$repo->begin();
+        $indRes = $this->ind->import(Indexer::ERRMODE_FAIL);
+        $this->noteResources($indRes);
+        self::$repo->commit();
+        $this->assertEquals(5, count($indRes));
+    }
+
+    /**
+     * Like testConflict1 but intended to fail because reingestion is turned off
+     * 
+     * @group indexer
+     */
+    public function testConflict2(): void {
+        self::$test = 'testConflict2';
+
+        $meta = (new Graph())->resource('.');
+        $meta->addResource(self::$config->schema->id, 'http://foo/' . rand());
+
+        $this->ind->setFilter('/txt|xml/', Indexer::FILTER_MATCH);
+        $this->ind->setFlatStructure(true);
+        $this->ind->setMetaLookup(new MetaLookupConstant($meta));
+        self::$repo->begin();
+        try {
+            $indRes = $this->ind->import(Indexer::ERRMODE_FAIL, 3, 0);
+            $this->noteResources($indRes);
+            $this->assertTrue(false);
+        } catch (IndexerException $e) {
+            $this->assertInstanceOf(Conflict::class, $e->getPrevious());
+        }
+        self::$repo->commit();
+    }
+
+    /**
+     * @group indexer
+     */
     public function testAutocommit(): void {
         self::$test = 'testAutocommit';
 
@@ -448,21 +491,17 @@ class IndexerTest extends TestBase {
             $this->ind->import(Indexer::ERRMODE_FAIL);
             $this->assertTrue(false);
         } catch (IndexerException $e) {
-            $this->assertStringContainsString('Wrong property value', $e->getMessage());
-            $this->assertCount(0, $e->getProcessedResources());
+            $this->assertStringContainsString('Wrong property value', $e->getPrevious()->getMessage());
+            $this->assertCount(0, $e->getCommitedResources());
         }
 
         // ERRMODE_PASS
         try {
             $this->ind->import(Indexer::ERRMODE_PASS);
         } catch (IndexerException $e) {
-            $this->assertEquals('There was at least one error during the import', $e->getMessage());
-            $processed = $e->getProcessedResources();
-            $this->assertCount(3, $processed);
-            foreach ($processed as $i) {
-                $this->assertInstanceOf(ClientException::class, $i);
-                $this->assertStringContainsString('Wrong property value', (string) $i->getResponse()->getBody());
-            }
+            $this->assertStringContainsString('There was at least one error during the import', $e->getMessage());
+            $this->assertStringContainsString('Wrong property value', $e->getMessage());
+            $this->assertCount(0, $e->getCommitedResources());
         }
 
         // ERRMODE_INCLUDE

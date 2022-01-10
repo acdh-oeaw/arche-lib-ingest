@@ -321,8 +321,9 @@ class MetadataCollectionTest extends TestBase {
         try {
             $indRes = $graph->import('https://id.acdh.oeaw.ac.at/', MetadataCollection::SKIP, MetadataCollection::ERRMODE_FAIL);
             $this->assertTrue(false);
-        } catch (ClientException $e) {
-            $this->assertStringContainsString('Wrong property value', $e->getMessage());
+        } catch (IndexerException $e) {
+            $this->assertInstanceOf(ClientException::class, $e->getPrevious());
+            $this->assertStringContainsString('Wrong property value', $e->getPrevious()->getMessage());
         }
         // can't test for resource one as ingestion order is unknown
         try {

@@ -26,7 +26,7 @@
 
 namespace acdhOeaw\arche\lib\ingest;
 
-use Exception;
+use Throwable;
 use InvalidArgumentException;
 use GuzzleHttp\Promise\RejectedPromise;
 use GuzzleHttp\Exception\ClientException;
@@ -279,20 +279,22 @@ class MetadataCollection extends Graph {
             return $promise1;
         };
 
-        $allRepoRes = [];
-        $errors     = '';
-        $chunkSize  = $this->autoCommit > 0 ? $this->autoCommit : count($toBeImported);
+        $allRepoRes      = [];
+        $commitedRepoRes = [];
+        $errors          = '';
+        $chunkSize       = $this->autoCommit > 0 ? $this->autoCommit : count($toBeImported);
         for ($i = 0; $i < count($toBeImported); $i += $chunkSize) {
             if ($this->autoCommit > 0 && $i > 0 && count($toBeImported) > $this->autoCommit && empty($errors)) {
                 echo self::$debug ? "Autocommit\n" : '';
+                $commitedRepoRes = $allRepoRes;
                 $this->repo->commit();
                 $this->repo->begin();
             }
             $chunk        = array_slice($toBeImported, $i, $chunkSize);
-            $chunkSize    = min($chunkSize, count($chunk)); // not to skip repeating reinjections
+            $chunkSize    = min($chunkSize, count($chunk)); // not to loose repeating reinjections
             $chunkRepoRes = $this->repo->map($chunk, $f, $concurrency, Repo::REJECT_INCLUDE);
             foreach ($chunkRepoRes as $n => $j) {
-                // handle reingestion on "HTTP 409 Resource XXX locked"
+                // handle reingestion on "HTTP 409 Conflict"
                 if ($j instanceof Conflict && preg_match('/Resource [0-9]+ locked|Owned by other request|Lock not available/', $j->getMessage())) {
                     $metaRes                          = $chunk[$n];
                     $reingestions[$metaRes->getUri()] = ($reingestions[$metaRes->getUri()] ?? 0) + 1;
@@ -301,19 +303,21 @@ class MetadataCollection extends Graph {
                         continue;
                     }
                 }
-                $allRepoRes[] = $j;
-                if ($j instanceof Exception && $errorMode === self::ERRMODE_FAIL) {
-                    throw $j;
-                } elseif ($j instanceof Exception) {
+                if ($j instanceof Throwable && $errorMode === self::ERRMODE_FAIL) {
+                    throw new IndexerException("Error during import", IndexerException::ERROR_DURING_IMPORT, $j, $commitedRepoRes);
+                } elseif ($j instanceof Throwable) {
                     $msg    = $j instanceof ClientException ? $j->getResponse()->getBody() : $j->getMessage();
                     $msg    = $chunk[$n]->getUri() . ": " . $msg;
                     $errors .= "\t$msg\n";
                     echo self::$debug ? "\tERROR while processing $msg\n" : '';
                 }
+                if ($j instanceof RepoResource || $errorMode === self::ERRMODE_INCLUDE) {
+                    $allRepoRes[] = $j;
+                }
             }
         }
         if (!empty($errors) && $errorMode === self::ERRMODE_PASS) {
-            throw new IndexerException("There was at least one error during the import:\n.$errors", IndexerException::ERROR_DURING_IMPORT);
+            throw new IndexerException("There was at least one error during the import:\n.$errors", IndexerException::ERROR_DURING_IMPORT, null, $commitedRepoRes);
         }
 
         return $allRepoRes;
