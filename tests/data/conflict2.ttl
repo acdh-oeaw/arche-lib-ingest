@@ -1,0 +1,20 @@
+@prefix f: <http://foo/>.
+
+f:r0  f:p0  f:r0 , f:r1 , f:r2 , f:r3 , f:r4 , f:r5 , f:r6 , f:r7 , f:r8 , f:r9 , f:r10 , f:r11 , f:r12 , f:r13 , f:r14 , f:r15 , f:r16 .
+f:r1  f:p1  f:r0 , f:r1 , f:r2 , f:r3 , f:r4 , f:r5 , f:r6 , f:r7 , f:r8 , f:r9 , f:r10 , f:r11 , f:r12 , f:r13 , f:r14 , f:r15 , f:r16 .
+f:r2  f:p2  f:r0 , f:r1 , f:r2 , f:r3 , f:r4 , f:r5 , f:r6 , f:r7 , f:r8 , f:r9 , f:r10 , f:r11 , f:r12 , f:r13 , f:r14 , f:r15 , f:r16 .
+f:r3  f:p3  f:r0 , f:r1 , f:r2 , f:r3 , f:r4 , f:r5 , f:r6 , f:r7 , f:r8 , f:r9 , f:r10 , f:r11 , f:r12 , f:r13 , f:r14 , f:r15 , f:r16 .
+f:r4  f:p4  f:r0 , f:r1 , f:r2 , f:r3 , f:r4 , f:r5 , f:r6 , f:r7 , f:r8 , f:r9 , f:r10 , f:r11 , f:r12 , f:r13 , f:r14 , f:r15 , f:r16 .
+f:r5  f:p5  f:r0 , f:r1 , f:r2 , f:r3 , f:r4 , f:r5 , f:r6 , f:r7 , f:r8 , f:r9 , f:r10 , f:r11 , f:r12 , f:r13 , f:r14 , f:r15 , f:r16 .
+f:r6  f:p6  f:r0 , f:r1 , f:r2 , f:r3 , f:r4 , f:r5 , f:r6 , f:r7 , f:r8 , f:r9 , f:r10 , f:r11 , f:r12 , f:r13 , f:r14 , f:r15 , f:r16 .
+f:r7  f:p7  f:r0 , f:r1 , f:r2 , f:r3 , f:r4 , f:r5 , f:r6 , f:r7 , f:r8 , f:r9 , f:r10 , f:r11 , f:r12 , f:r13 , f:r14 , f:r15 , f:r16 .
+f:r8  f:p8  f:r0 , f:r1 , f:r2 , f:r3 , f:r4 , f:r5 , f:r6 , f:r7 , f:r8 , f:r9 , f:r10 , f:r11 , f:r12 , f:r13 , f:r14 , f:r15 , f:r16 .
+f:r9  f:p9  f:r0 , f:r1 , f:r2 , f:r3 , f:r4 , f:r5 , f:r6 , f:r7 , f:r8 , f:r9 , f:r10 , f:r11 , f:r12 , f:r13 , f:r14 , f:r15 , f:r16 .
+f:r10 f:p10 f:r0 , f:r1 , f:r2 , f:r3 , f:r4 , f:r5 , f:r6 , f:r7 , f:r8 , f:r9 , f:r10 , f:r11 , f:r12 , f:r13 , f:r14 , f:r15 , f:r16 .
+f:r11 f:p11 f:r0 , f:r1 , f:r2 , f:r3 , f:r4 , f:r5 , f:r6 , f:r7 , f:r8 , f:r9 , f:r10 , f:r11 , f:r12 , f:r13 , f:r14 , f:r15 , f:r16 .
+f:r12 f:p12 f:r0 , f:r1 , f:r2 , f:r3 , f:r4 , f:r5 , f:r6 , f:r7 , f:r8 , f:r9 , f:r10 , f:r11 , f:r12 , f:r13 , f:r14 , f:r15 , f:r16 .
+f:r13 f:p13 f:r0 , f:r1 , f:r2 , f:r3 , f:r4 , f:r5 , f:r6 , f:r7 , f:r8 , f:r9 , f:r10 , f:r11 , f:r12 , f:r13 , f:r14 , f:r15 , f:r16 .
+f:r14 f:p14 f:r0 , f:r1 , f:r2 , f:r3 , f:r4 , f:r5 , f:r6 , f:r7 , f:r8 , f:r9 , f:r10 , f:r11 , f:r12 , f:r13 , f:r14 , f:r15 , f:r16 .
+f:r15 f:p15 f:r0 , f:r1 , f:r2 , f:r3 , f:r4 , f:r5 , f:r6 , f:r7 , f:r8 , f:r9 , f:r10 , f:r11 , f:r12 , f:r13 , f:r14 , f:r15 , f:r16 .
+f:r16 f:p16 f:r0 , f:r1 , f:r2 , f:r3 , f:r4 , f:r5 , f:r6 , f:r7 , f:r8 , f:r9 , f:r10 , f:r11 , f:r12 , f:r13 , f:r14 , f:r15 , f:r16 .
+

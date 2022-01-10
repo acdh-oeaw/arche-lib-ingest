@@ -202,6 +202,8 @@ class MetadataCollection extends Graph {
      *     Exception objects for failed ones.
      * @param int $concurrency number of parallel requests to the repository
      *   allowed during the import
+     * @param int $retriesOnConflict how many ingestion attempts should be taken
+     *   if the repository resource is locked by other request
      * @return array<RepoResource|ClientException>
      * @throws InvalidArgumentException
      * @throws IndexerException
@@ -209,7 +211,7 @@ class MetadataCollection extends Graph {
      */
     public function import(string $namespace, int $singleOutNmsp,
                            string $errorMode = self::ERRMODE_FAIL,
-                           int $concurrency = 3): array {
+                           int $concurrency = 3, int $retriesOnConflict = 3): array {
         $idProp = $this->repo->getSchema()->id;
 
         $dict = [self::SKIP, self::CREATE];
@@ -225,8 +227,6 @@ class MetadataCollection extends Graph {
         }
         $toBeImported = $this->filterResources($namespace, $singleOutNmsp);
 
-        $mapErrorMode = $errorMode === self::ERRMODE_FAIL ? Repo::REJECT_FAIL : Repo::REJECT_INCLUDE;
-
         // The only possible way of performing an atomic "check if resources exists and create it if not"
         // is to try to create it, therefore the algorithm goes as follows:
         // - [promise1] try to create the resource
@@ -237,23 +237,27 @@ class MetadataCollection extends Graph {
         //     - it it's primary key violation such a resource exists already so:
         //       - [promise2] find it
         //         - [promise3] update its metadata
-        $N = count($toBeImported);
-        $n = 0;
-        $f = function (Resource $res, Repo $repo) use (&$n, $N, $idProp) {
+        $N            = count($toBeImported);
+        $n            = 0;
+        $reingestions = [];
+        $f            = function (Resource $res, Repo $repo) use (&$n, $N,
+                                                                  $idProp,
+                                                                  &$reingestions) {
             $n++;
-            $uri = $res->getUri();
-            echo self::$debug ? "Importing " . $uri . " ($n/$N)\n" : "";
+            $uri      = $res->getUri();
+            $progress = "($n/$N)" . (isset($reingestions[$uri]) ? " - $reingestions[$uri] reattempt" : '');
+            echo self::$debug ? "Importing $uri $progress\n" : "";
             $this->sanitizeResource($res);
 
             $promise1 = $this->repo->createResourceAsync($res);
             $promise1 = $promise1->then(
-                function (RepoResource $repoRes) use ($n, $N) {
-                    echo self::$debug ? "\tcreated " . $repoRes->getUri() . " ($n/$N)\n" : "";
+                function (RepoResource $repoRes) use ($progress) {
+                    echo self::$debug ? "\tcreated " . $repoRes->getUri() . " $progress\n" : "";
                     return $repoRes;
                 }
             );
             $promise1 = $promise1->otherwise(
-                function ($reason) use ($res, $idProp, $n, $N) {
+                function ($reason) use ($res, $idProp, $progress) {
                     if (!($reason instanceof Conflict)) {
                         return new RejectedPromise($reason);
                     }
@@ -262,8 +266,8 @@ class MetadataCollection extends Graph {
                     }, $res->allResources($idProp));
                     $promise2 = $this->repo->getResourceByIdsAsync($ids);
                     $promise2 = $promise2->then(
-                        function (RepoResource $repoRes) use ($res, $n, $N) {
-                            echo self::$debug ? "\tupdating " . $repoRes->getUri() . " ($n/$N)\n" : "";
+                        function (RepoResource $repoRes) use ($res, $progress) {
+                            echo self::$debug ? "\tupdating " . $repoRes->getUri() . " $progress\n" : "";
                             $repoRes->setMetadata($res);
                             $promise3 = $repoRes->updateMetadataAsync();
                             return $promise3 === null ? $repoRes : $promise3->then(fn() => $repoRes);
@@ -279,24 +283,34 @@ class MetadataCollection extends Graph {
         $errors     = '';
         $chunkSize  = $this->autoCommit > 0 ? $this->autoCommit : count($toBeImported);
         for ($i = 0; $i < count($toBeImported); $i += $chunkSize) {
-            if ($i > 0 && empty($errors)) {
+            if ($this->autoCommit > 0 && $i > 0 && count($toBeImported) > $this->autoCommit && empty($errors)) {
                 echo self::$debug ? "Autocommit\n" : '';
                 $this->repo->commit();
                 $this->repo->begin();
             }
             $chunk        = array_slice($toBeImported, $i, $chunkSize);
-            $chunkRepoRes = $this->repo->map($chunk, $f, $concurrency, $mapErrorMode);
+            $chunkSize    = min($chunkSize, count($chunk)); // not to skip repeating reinjections
+            $chunkRepoRes = $this->repo->map($chunk, $f, $concurrency, Repo::REJECT_INCLUDE);
             foreach ($chunkRepoRes as $n => $j) {
-                if ($j instanceof Exception) {
+                // handle reingestion on "HTTP 409 Resource XXX locked"
+                if ($j instanceof Conflict && preg_match('/Resource [0-9]+ locked|Owned by other request|Lock not available/', $j->getMessage())) {
+                    $metaRes                          = $chunk[$n];
+                    $reingestions[$metaRes->getUri()] = ($reingestions[$metaRes->getUri()] ?? 0) + 1;
+                    if ($reingestions[$metaRes->getUri()] <= $retriesOnConflict) {
+                        $toBeImported[] = $metaRes;
+                        continue;
+                    }
+                }
+                $allRepoRes[] = $j;
+                if ($j instanceof Exception && $errorMode === self::ERRMODE_FAIL) {
+                    throw $j;
+                } elseif ($j instanceof Exception) {
                     $msg    = $j instanceof ClientException ? $j->getResponse()->getBody() : $j->getMessage();
                     $msg    = $chunk[$n]->getUri() . ": " . $msg;
                     $errors .= "\t$msg\n";
-                    if (self::$debug) {
-                        echo "\tERROR while processing $msg\n";
-                    }
+                    echo self::$debug ? "\tERROR while processing $msg\n" : '';
                 }
             }
-            $allRepoRes = array_merge($allRepoRes, $chunkRepoRes);
         }
         if (!empty($errors) && $errorMode === self::ERRMODE_PASS) {
             throw new IndexerException("There was at least one error during the import:\n.$errors", IndexerException::ERROR_DURING_IMPORT);

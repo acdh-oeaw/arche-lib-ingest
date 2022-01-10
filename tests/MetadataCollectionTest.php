@@ -26,9 +26,11 @@
 
 namespace acdhOeaw\arche\lib\ingest\tests;
 
+use EasyRdf\Graph;
 use GuzzleHttp\Exception\ClientException;
 use acdhOeaw\arche\lib\RepoResource;
 use acdhOeaw\arche\lib\exception\NotFound;
+use acdhOeaw\arche\lib\exception\Conflict;
 use acdhOeaw\arche\lib\ingest\IndexerException;
 use acdhOeaw\arche\lib\ingest\MetadataCollection;
 
@@ -181,6 +183,54 @@ class MetadataCollectionTest extends TestBase {
     }
 
     /**
+     * Pre-create a common repository resource, then ingest two separate resources
+     * sharing an id with the pre-created one. This will lead to the HTTP 409 Conflict
+     * for one of the updates.
+     * 
+     * @group metadataCollection
+     */
+    public function testConflictOnLocked1(): void {
+        self::$test = 'testConflictOnLocked1';
+
+        $resId   = 'http://foo/rs1';
+        $resMeta = (new Graph())->resource($resId);
+        $resMeta->addResource(self::$config->schema->id, $resId);
+
+        $graph   = new MetadataCollection(self::$repo, __DIR__ . '/data/conflict1.ttl');
+        self::$repo->begin();
+        $repoRes = self::$repo->createResource($resMeta);
+        $this->noteResources([$repoRes]);
+
+        $indRes = $graph->import('http://foo/', MetadataCollection::SKIP, MetadataCollection::ERRMODE_FAIL);
+        $this->noteResources($indRes);
+        self::$repo->commit();
+
+        $this->assertCount(2, $indRes);
+    }
+
+    public function testConflictOnLocked2(): void {
+        self::$test = 'testConflictOnLocked2';
+
+        $graph  = new MetadataCollection(self::$repo, __DIR__ . '/data/conflict2.ttl');
+        self::$repo->begin();
+        $indRes = $graph->import('http://foo/', MetadataCollection::SKIP, MetadataCollection::ERRMODE_FAIL, 17, 17);
+        $this->noteResources($indRes);
+        self::$repo->rollback();
+        
+        // there should be no autocommit
+        foreach ($graph->resources() as $res) {
+            try {
+                self::$repo->getResourceById($res->getUri());
+                $this->assertTrue(false, "Autocommit happened");
+            } catch (NotFound) {
+                $this->assertTrue(true);
+            }
+        }
+
+        $this->assertCount(17, $indRes);
+    }
+
+    /**
      * @large
      * @group largeMetadataCollection
      */
@@ -199,7 +249,7 @@ class MetadataCollectionTest extends TestBase {
     /**
      * @group metadataCollection
      */
-    public function testImportSingleOutNmsp(): void {
+    public function testWrongSingleOutNmsp(): void {
         self::$test = 'testImportSingleOutNmsp';
 
         $graph  = new MetadataCollection(self::$repo, __DIR__ . '/data/basicResources.ttl');

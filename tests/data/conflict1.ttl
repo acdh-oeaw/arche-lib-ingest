@@ -1,0 +1,5 @@
+@prefix f: <http://foo/>.
+@prefix acdh: <https://vocabs.acdh.oeaw.ac.at/schema#>.
+
+f:rs2 acdh:hasIdentifier f:rs1 .
+f:rs3 acdh:hasIdentifier f:rs1 .
