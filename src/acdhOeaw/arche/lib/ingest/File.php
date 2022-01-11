@@ -143,7 +143,7 @@ class File {
     public function getUploadsCount(): int {
         return $this->uploadsCount;
     }
-    
+
     private function versioningAsync(): RepoResourcePromise | RepoResource {
         $schema = $this->repo->getSchema();
 

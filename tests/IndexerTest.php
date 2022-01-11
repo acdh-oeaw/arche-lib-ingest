@@ -29,6 +29,7 @@ namespace acdhOeaw\arche\lib\ingest\tests;
 use EasyRdf\Graph;
 use EasyRdf\Literal;
 use zozlak\RdfConstants as RDF;
+use GuzzleHttp\Psr7\Request;
 use GuzzleHttp\Exception\ClientException;
 use acdhOeaw\arche\lib\RepoResource;
 use acdhOeaw\arche\lib\exception\NotFound;
@@ -116,7 +117,22 @@ class IndexerTest extends TestBase {
         self::$repo->begin();
         $indRes = $this->ind->import(Indexer::ERRMODE_FAIL);
         $this->noteResources($indRes);
+        foreach ($indRes as $i) {
+            $file = (string) $i->getGraph()->getLiteral(self::$config->schema->fileName);
+            if (is_file(__DIR__ . "/data/$file")) {
+                $resp = self::$repo->sendRequest(new Request('get', $i->getUri()));
+                $this->assertEquals(file_get_contents(__DIR__ . "/data/$file"), (string) $resp->getBody());
+            }
+        }
+        
         self::$repo->commit();
+        foreach ($indRes as $i) {
+            $file = (string) $i->getGraph()->getLiteral(self::$config->schema->fileName);
+            if (is_file(__DIR__ . "/data/$file")) {
+                $resp = self::$repo->sendRequest(new Request('get', $i->getUri()));
+                $this->assertEquals(file_get_contents(__DIR__ . "/data/$file"), (string) $resp->getBody());
+            }
+        }
 
         $this->assertEquals(6, count($indRes));
     }
