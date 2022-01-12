@@ -578,6 +578,7 @@ class Indexer {
 
     private function createFile(SplFileInfo $file): File {
         $path   = $file->getPathname();
+        $dir    = $file->getPath();
         $schema = $this->repo->getSchema();
 
         $id = self::pathToUtf8($path);
@@ -598,10 +599,10 @@ class Indexer {
             $extMeta->addResource(RDF::RDF_TYPE, $this->binaryClass);
         }
         // parent
-        if (isset($this->parent) && ($this->flatStructure || $path === $this->directory)) {
+        if (isset($this->parent) && ($this->flatStructure || $dir === $this->directory)) {
             $extMeta->addResource($schema->parent, $this->parent->getUri());
         }
-        if ($path !== $this->directory && !$this->flatStructure) {
+        if ($dir !== $this->directory && !$this->flatStructure) {
             $extMeta->addResource($schema->parent, substr($id, 0, strrpos($id, '/') ?: null));
         }
         // mime type and binary size
