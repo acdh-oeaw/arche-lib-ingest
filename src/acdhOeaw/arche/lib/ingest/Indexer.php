@@ -257,6 +257,10 @@ class Indexer {
         $this->idPrefix  = $idPrefix;
         $this->repo      = $repo;
 
+        if (substr($this->directory, -1) === '/') {
+            $this->directory = substr($this->directory, 0, -1);
+        }
+
         $this->schema          = $this->repo->getSchema();
         $this->binaryClass     = $this->schema->ingest->defaultBinaryClass;
         $this->collectionClass = $this->schema->ingest->defaultCollectionClass;
