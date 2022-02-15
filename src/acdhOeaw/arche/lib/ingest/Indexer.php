@@ -505,7 +505,7 @@ class Indexer {
         $allRepoRes      = [];
         $commitedRepoRes = [];
         $errors          = '';
-        $chunkSize       = $this->autoCommit > 0 ? $this->autoCommit : count($filesToImport);
+        $chunkSize       = $this->autoCommit > 0 ? $this->autoCommit : min(count($filesToImport), 100 * $concurrency);
         for ($i = 0; $i < count($filesToImport); $i += $chunkSize) {
             if ($this->autoCommit > 0 && $i > 0 && count($filesToImport) > $this->autoCommit && empty($errors)) {
                 echo self::$debug ? "Autocommit\n" : '';
@@ -521,7 +521,7 @@ class Indexer {
                     continue;
                 }
                 // handle reingestion on "HTTP 409 Conflict"
-                if ($j instanceof Conflict && preg_match('/Resource [0-9]+ locked|Owned by other request|Lock not available|duplicate key value/', $j->getMessage())) {
+                if ($j instanceof Conflict && preg_match('/Resource [0-9]+ locked|Transaction [0-9]+ locked|Owned by other request|Lock not available|duplicate key value/', $j->getMessage())) {
                     if ($chunk[$n]->getUploadsCount() <= $retriesOnConflict + 1) {
                         $filesToImport[] = $chunk[$n];
                         continue;

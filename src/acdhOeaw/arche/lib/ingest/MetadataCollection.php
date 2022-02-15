@@ -282,7 +282,7 @@ class MetadataCollection extends Graph {
         $allRepoRes      = [];
         $commitedRepoRes = [];
         $errors          = '';
-        $chunkSize       = $this->autoCommit > 0 ? $this->autoCommit : count($toBeImported);
+        $chunkSize       = $this->autoCommit > 0 ? $this->autoCommit : min(count($toBeImported), 100 * $concurrency);
         for ($i = 0; $i < count($toBeImported); $i += $chunkSize) {
             if ($this->autoCommit > 0 && $i > 0 && count($toBeImported) > $this->autoCommit && empty($errors)) {
                 echo self::$debug ? "Autocommit\n" : '';
@@ -295,7 +295,7 @@ class MetadataCollection extends Graph {
             $chunkRepoRes = $this->repo->map($chunk, $f, $concurrency, Repo::REJECT_INCLUDE);
             foreach ($chunkRepoRes as $n => $j) {
                 // handle reingestion on "HTTP 409 Conflict"
-                if ($j instanceof Conflict && preg_match('/Resource [0-9]+ locked|Owned by other request|Lock not available/', $j->getMessage())) {
+                if ($j instanceof Conflict && preg_match('/Resource [0-9]+ locked|Transaction [0-9]+ locked|Owned by other request|Lock not available/', $j->getMessage())) {
                     $metaRes                          = $chunk[$n];
                     $reingestions[$metaRes->getUri()] = ($reingestions[$metaRes->getUri()] ?? 0) + 1;
                     if ($reingestions[$metaRes->getUri()] <= $retriesOnConflict) {
