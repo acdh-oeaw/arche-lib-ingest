@@ -213,7 +213,7 @@ class MetadataCollectionTest extends TestBase {
 
         $graph  = new MetadataCollection(self::$repo, __DIR__ . '/data/conflict2.ttl');
         self::$repo->begin();
-        $indRes = $graph->import('http://foo/', MetadataCollection::SKIP, MetadataCollection::ERRMODE_FAIL, 17, 20);
+        $indRes = $graph->import('http://foo/', MetadataCollection::SKIP, MetadataCollection::ERRMODE_FAIL, 17, 34);
         $this->noteResources($indRes);
         self::$repo->rollback();
         
