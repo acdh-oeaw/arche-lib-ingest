@@ -516,7 +516,7 @@ class Indexer {
             $chunk        = array_slice($filesToImport, $i, $chunkSize);
             $chunkSize    = min($chunkSize, count($chunk)); // not to loose repeating reinjections
             $chunkRepoRes = $this->repo->map($chunk, $f, $concurrency, Repo::REJECT_INCLUDE);
-            foreach ($chunkRepoRes ?? [] as $n => $j) {
+            foreach ($chunkRepoRes as $n => $j) {
                 if ($j instanceof SkippedException) {
                     continue;
                 }

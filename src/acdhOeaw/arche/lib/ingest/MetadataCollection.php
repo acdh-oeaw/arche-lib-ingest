@@ -53,7 +53,7 @@ class MetadataCollection extends Graph {
     /**
      * Turns debug messages on
      */
-    static public bool $debug = false;
+    static public bool | int $debug = false;
 
     /**
      * Makes given resource a proper agent
@@ -339,8 +339,6 @@ class MetadataCollection extends Graph {
 
         echo self::$debug ? "Filtering resources...\n" : '';
         foreach ($this->resources() as $res) {
-            echo self::$debug ? "\t" . $res->getUri() . "\n" : '';
-
             $nonIdProps = array_diff($res->propertyUris(), [$idProp]);
             $inNmsp     = false;
             $ids        = [];
@@ -351,13 +349,13 @@ class MetadataCollection extends Graph {
             }
 
             if (count($ids) == 0) {
-                echo self::$debug ? "\t\tskipping - no ids\n" : '';
+                echo self::$debug ? "\t" . $res->getUri() . " skipping - no ids\n" : '';
             } elseif (count($nonIdProps) == 0 && $this->isIdElsewhere($res)) {
-                echo self::$debug ? "\t\tskipping - single id assigned to another resource\n" : '';
+                echo self::$debug ? "\t" . $res->getUri() . " skipping - single id assigned to another resource\n" : '';
             } elseif (count($nonIdProps) == 0 && $singleOutNmsp !== MetadataCollection::CREATE && !$inNmsp) {
-                echo self::$debug ? "\t\tskipping - onlyIds, outside namespace and mode == MetadataCollection::SKIP\n" : '';
+                echo self::$debug ? "\t" . $res->getUri() . " skipping - onlyIds, outside namespace and mode == MetadataCollection::SKIP\n" : '';
             } else {
-                echo self::$debug ? "\t\tincluding\n" : '';
+                echo self::$debug > 1 ? "\t" . $res->getUri() . " including\n" : '';
                 $result[] = $res;
             }
 
@@ -488,7 +486,7 @@ class MetadataCollection extends Graph {
         foreach ($this->resources() as $i) {
             if (!$i->isBNode() and count($i->propertyUris()) > 0) {
                 $uri = (string) $i;
-                echo self::$debug ? "\t" . $uri . "\n" : '';
+                echo self::$debug > 1 ? "\t" . $uri . "\n" : '';
                 $i->addResource($this->repo->getSchema()->id, $uri);
             }
         }
