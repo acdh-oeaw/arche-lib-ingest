@@ -237,15 +237,15 @@ class MetadataCollection extends Graph {
         //     - it it's primary key violation such a resource exists already so:
         //       - [promise2] find it
         //         - [promise3] update its metadata
-        $N            = count($toBeImported);
-        $n            = 0;
+        $GN           = count($toBeImported);
+        $Gn           = 0;
         $reingestions = [];
-        $f            = function (Resource $res, Repo $repo) use (&$n, $N,
+        $f            = function (Resource $res, Repo $repo) use (&$Gn, $GN,
                                                                   $idProp,
                                                                   &$reingestions) {
-            $n++;
+            $Gn++;
             $uri      = $res->getUri();
-            $progress = "($n/$N)" . (isset($reingestions[$uri]) ? " - $reingestions[$uri] reattempt" : '');
+            $progress = "($Gn/$GN)" . (isset($reingestions[$uri]) ? " - $reingestions[$uri] reattempt" : '');
             echo self::$debug ? "Importing $uri $progress\n" : "";
             $this->sanitizeResource($res);
 
