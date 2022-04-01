@@ -51,7 +51,15 @@ class MetadataCollection extends Graph {
     const ERRMODE_INCLUDE = 'include';
 
     /**
-     * Turns debug messages on
+     * Turns debug messages on.
+     * 
+     * There are three levels:
+     * 
+     * - `false` or `0` - no debug messages at all
+     * - `true` or `1` - basic information on preprocessing stages and detailed 
+     *   information on ingestion progress
+     * - `2` - detailed information on both preprocessing and ingestion
+     *   progress
      */
     static public bool | int $debug = false;
 
