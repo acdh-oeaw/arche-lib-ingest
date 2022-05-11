@@ -314,8 +314,8 @@ class MetadataCollection extends Graph {
                 if ($j instanceof Throwable && $errorMode === self::ERRMODE_FAIL) {
                     throw new IndexerException("Error during import", IndexerException::ERROR_DURING_IMPORT, $j, $commitedRepoRes);
                 } elseif ($j instanceof Throwable) {
-                    $msg    = $j instanceof ClientException ? $j->getResponse()->getBody() : $j->getMessage();
-                    $msg    = $chunk[$n]->getUri() . ": " . $msg;
+                    $msg    = $j instanceof ClientException ? $j->getResponse()->getStatusCode() . ' ' . $j->getResponse()->getBody() : $j->getMessage();
+                    $msg    = $chunk[$n]->getUri() . ": " . $msg . "(" . get_class($j) . ")";
                     $errors .= "\t$msg\n";
                     echo self::$debug ? "\tERROR while processing $msg\n" : '';
                 }
