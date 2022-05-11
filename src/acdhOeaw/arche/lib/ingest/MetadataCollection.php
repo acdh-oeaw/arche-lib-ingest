@@ -35,6 +35,7 @@ use EasyRdf\Resource;
 use acdhOeaw\arche\lib\Repo;
 use acdhOeaw\arche\lib\RepoResource;
 use acdhOeaw\arche\lib\exception\Conflict;
+use acdhOeaw\arche\lib\exception\NotFound;
 use acdhOeaw\UriNormalizer;
 
 /**
@@ -303,7 +304,9 @@ class MetadataCollection extends Graph {
             $chunkRepoRes = $this->repo->map($chunk, $f, $concurrency, Repo::REJECT_INCLUDE);
             foreach ($chunkRepoRes as $n => $j) {
                 // handle reingestion on "HTTP 409 Conflict"
-                if ($j instanceof Conflict && preg_match('/Resource [0-9]+ locked|Transaction [0-9]+ locked|Owned by other request|Lock not available/', $j->getMessage())) {
+                $conflict = $j instanceof Conflict && preg_match('/Resource [0-9]+ locked|Transaction [0-9]+ locked|Owned by other request|Lock not available/', $j->getMessage());
+                $notFound = $j instanceof NotFound;
+                if ($conflict || $notFound) {
                     $metaRes                          = $chunk[$n];
                     $reingestions[$metaRes->getUri()] = ($reingestions[$metaRes->getUri()] ?? 0) + 1;
                     if ($reingestions[$metaRes->getUri()] <= $retriesOnConflict) {
