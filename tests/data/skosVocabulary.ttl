@@ -1,0 +1,71 @@
+@prefix dc: <http://purl.org/dc/elements/1.1/> .
+@prefix dct: <http://purl.org/dc/terms/> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix xml: <http://www.w3.org/XML/1998/namespace> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+<https://foo/scheme>
+    a                   skos:ConceptScheme ;
+    skos:prefLabel      "SKOS label"@en ;
+    skos:prefLabel      "SKOS DE label"@de ;
+    rdfs:label          "RDFS label"@en ;
+    dc:title            "DC label" ;
+    skos:hasTopConcept  <https://foo/scheme/1> ;
+    <https://baz/prop>  <https://foo/scheme/1> ,
+                        <https://bar/scheme/1> ,
+                        <https://bar/scheme/2> .
+
+<https://foo/scheme/1>
+    a                   skos:Concept ;
+    skos:prefLabel      "SKOS label"@en ;
+    skos:prefLabel      "SKOS DE label"@de ;
+    dc:title            "DC label"@en ;
+    skos:inScheme       <https://foo/scheme> ;
+    skos:topConceptOf   <https://foo/scheme> ;
+    skos:exactMatch     <https://foo/scheme/2> ,
+                        <https://bar/scheme/2> ;
+    skos:closeMatch     <https://foo/scheme/3> ,
+                        <https://bar/scheme/3> ,
+                        <https://bar/scheme/4> ;
+    <https://baz/prop>  <https://foo/scheme/3> ,
+                        <https://bar/scheme/3> ,
+                        <https://bar/scheme/4> .
+
+<https://foo/scheme/2>
+    a                   skos:Concept ;
+    skos:prefLabel      "SKOS label"@en ;
+    skos:prefLabel      "SKOS DE label"@de ;
+    dc:title            "DC label"@en ;
+    skos:inScheme       <https://foo/scheme> ;
+    skos:exactMatch     <https://foo/scheme/1> ,
+                        <https://bar/scheme/1> .
+<https://foo/scheme/3>
+    a                   skos:Concept ;
+    skos:prefLabel      "SKOS label"@en ;
+    skos:prefLabel      "SKOS DE label"@de ;
+    dc:title            "DC label"@en ;
+    skos:inScheme       <https://foo/scheme> .
+
+<https://bar/scheme/2>
+    a                   skos:Concept ;
+    skos:prefLabel      "SKOS label"@en ;
+    skos:prefLabel      "SKOS DE label"@de ;
+    dc:title            "DC label"@en ;
+    skos:inScheme       <https://bar/scheme> ;
+    skos:exactMatch     <https://foo/scheme/1> .
+
+<https://bar/scheme/3>
+    a                   skos:Concept ;
+    skos:prefLabel      "SKOS label"@en ;
+    skos:prefLabel      "SKOS DE label"@de ;
+    dc:title            "DC label"@en ;
+    skos:inScheme       <https://bar/scheme> .
+
+<https://foo/coll>
+    a                   skos:Collection ;
+    skos:member         <https://foo/scheme/1> ;
+    dc:title            "SKOS label"@en .
+

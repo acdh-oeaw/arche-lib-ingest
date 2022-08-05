@@ -79,7 +79,7 @@ class MetadataCollection extends Graph {
     /**
      * Repository connection object
      */
-    private Repo $repo;
+    protected Repo $repo;
 
     /**
      * Parent resource for all imported graph nodes
@@ -90,7 +90,7 @@ class MetadataCollection extends Graph {
      * Should the title property be added automatically for ingested resources
      * missing it.
      */
-    private bool $addTitle = false;
+    protected bool $addTitle = false;
 
     /**
      * Number of resource automatically triggering a commit (0 - no auto commit)
@@ -107,9 +107,9 @@ class MetadataCollection extends Graph {
      * 
      * @param Repo $repo
      * @param string $file
-     * @param string $format
+     * @param string|null $format
      */
-    public function __construct(Repo $repo, string $file, string $format = null) {
+    public function __construct(Repo $repo, string $file, ?string $format = null) {
         parent::__construct();
         $this->parseFile($file, $format);
 

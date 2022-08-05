@@ -16,7 +16,7 @@
         "acdh-oeaw/arche-lib": ">=4 <6",
         "acdh-oeaw/easyrdf": ">=0.13.5",
         "acdh-oeaw/uri-normalizer": "^1",
-        "zozlak/rdf-constants": "^1.1"
+        "zozlak/rdf-constants": "^1.2.1"
     },
     "autoload": {
         "psr-4": {
