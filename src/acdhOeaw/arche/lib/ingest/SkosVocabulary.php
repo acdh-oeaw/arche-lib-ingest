@@ -264,7 +264,7 @@ class SkosVocabulary extends MetadataCollection {
             self::EXACTMATCH_MERGE, self::EXACTMATCH_LITERAL
         ];
         if (!in_array($inVocabulary, $allowed) || !in_array($notInVocabulary, $allowed)) {
-            throw new BadMethodCallException("Wrong inVocabulary od notInVocabulary parameter value");
+            throw new BadMethodCallException("Wrong inVocabulary or notInVocabulary parameter value");
         }
         $this->exactMatchModeSchema = $inVocabulary;
         $this->exactMatchMode       = $notInVocabulary;
@@ -291,7 +291,7 @@ class SkosVocabulary extends MetadataCollection {
                                          string $notInVocabulary): self {
         $allowed = [self::RELATIONS_DROP, self::RELATIONS_KEEP, self::RELATIONS_LITERAL];
         if (!in_array($inVocabulary, $allowed) || !in_array($notInVocabulary, $allowed)) {
-            throw new BadMethodCallException("Wrong inVocabulary od notInVocabulary parameter value");
+            throw new BadMethodCallException("Wrong inVocabulary or notInVocabulary parameter value");
         }
         $this->relationsModeSchema = $inVocabulary;
         $this->relationsMode       = $notInVocabulary;

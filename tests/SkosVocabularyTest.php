@@ -26,6 +26,7 @@
 
 namespace acdhOeaw\arche\lib\ingest\tests;
 
+use Exception;
 use acdhOeaw\arche\lib\exception\NotFound;
 use acdhOeaw\arche\lib\ingest\SkosVocabulary;
 use zozlak\RdfConstants as RDF;
@@ -120,14 +121,18 @@ class SkosVocabularyTest extends TestBase {
      */
     public function testImportMinimal(): void {
         self::$test = 'importMinimal';
-        $titleProp  = self::$repo->getSchema()->label;
-        $idProp     = self::$repo->getSchema()->label;
+
+        $schema     = self::$repo->getSchema();
+        $titleProp  = $schema->label;
+        $idProp     = $schema->label;
+        $parentProp = $schema->parent;
 
         $vocab    = (new SkosVocabulary(self::$repo, __DIR__ . '/data/skosVocabulary.ttl'))
             ->setExactMatchMode(SkosVocabulary::EXACTMATCH_DROP, SkosVocabulary::EXACTMATCH_DROP)
             ->setSkosRelationsMode(SkosVocabulary::RELATIONS_DROP, SkosVocabulary::RELATIONS_DROP)
             ->setEnforceLiterals(true)
             ->setImportCollections(false)
+            ->setAddParentProperty(false)
             ->setAllowedNamespaces([])
             ->setTitleProperties([])
             ->setAddTitle(true)
@@ -141,6 +146,7 @@ class SkosVocabularyTest extends TestBase {
             $meta = $i->getGraph();
             $this->assertCount(1, $meta->allResources(RDF::RDF_TYPE));
             $this->assertCount(0, $meta->all('http://purl.org/dc/elements/1.1/title'));
+            $this->assertCount(0, $meta->all($parentProp));
             $ids  = array_map(fn($x) => (string) $x, $meta->all($idProp));
             $ids  = array_diff($ids, [$i->getUri()]);
             $this->assertEquals($ids[0] ?? '__error__', (string) $meta->get($titleProp));
@@ -160,6 +166,41 @@ class SkosVocabularyTest extends TestBase {
     }
 
     public function testErrors(): void {
-        
+        $tmpFile = tempnam(sys_get_temp_dir(), '');
+
+        file_put_contents($tmpFile, '<https://foo/bar> <https://bar/baz> "foo" .');
+        try {
+            new SkosVocabulary(self::$repo, $tmpFile);
+            $this->assertTrue(false, 'No error on no skos:ConceptSchema');
+        } catch (Exception $ex) {
+            $this->assertEquals('No skos:ConceptSchema found in the RDF graph', $ex->getMessage());
+        }
+
+        $vocabulary = "
+            <https://foo/bar> <" . RDF::RDF_TYPE . "> <" . RDF::SKOS_CONCEPT_SCHEMA . "> .
+            <https://foo/baz> <" . RDF::RDF_TYPE . "> <" . RDF::SKOS_CONCEPT_SCHEMA . "> .
+        ";
+        file_put_contents($tmpFile, $vocabulary);
+        try {
+            new SkosVocabulary(self::$repo, $tmpFile);
+            $this->assertTrue(false, 'No error on many skos:ConceptSchema');
+        } catch (Exception $ex) {
+            $this->assertEquals('Many skos:ConceptSchema found in the RDF graph', $ex->getMessage());
+        }
+
+        $vocab = new SkosVocabulary(self::$repo, __DIR__ . '/data/skosVocabulary.ttl');
+        try {
+            $vocab->setExactMatchMode('foo', 'bar');
+            $this->assertTrue(false, 'Wrong exact match mode accepted');
+        } catch (Exception $ex) {
+            $this->assertEquals('Wrong inVocabulary or notInVocabulary parameter value', $ex->getMessage());
+        }
+        try {
+            $vocab->setSkosRelationsMode('foo', 'bar');
+            $this->assertTrue(false, 'Wrong skos relations mode accepted');
+        } catch (Exception $ex) {
+            $this->assertEquals('Wrong inVocabulary or notInVocabulary parameter value', $ex->getMessage());
+        }
+        unlink($tmpFile);
     }
 }
