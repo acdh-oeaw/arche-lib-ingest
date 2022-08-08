@@ -410,16 +410,6 @@ class SkosVocabulary extends MetadataCollection {
             return [];
         }
 
-        // remember the list of initially existing entities
-        $schema            = $this->repo->getSchema();
-        $term              = new SearchTerm([RDF::SKOS_IN_SCHEME, $schema->parent], $this->vocabularyUrl);
-        $cfg               = new SearchConfig();
-        $cfg->metadataMode = 'ids';
-        $existing          = iterator_to_array($this->repo->getResourcesBySearchTerms([
-                $term], $cfg));
-        $existingUris      = array_map(fn($x) => $x->getUri(), $existing);
-        $existing          = array_combine($existingUris, $existing);
-
         // perform the inestion
         $imported = parent::import($namespace, $singleOutNmsp, $errorMode, $concurrency, $retriesOnConflict);
 
@@ -431,13 +421,7 @@ class SkosVocabulary extends MetadataCollection {
         $repoRes->updateContent($payload, RRI::META_NONE);
 
         // remove obsolete entities
-        echo self::$debug ? "Removing obsolete resources\n" : '';
-        $importedUris = array_map(fn($x) => $x instanceof RepoResource ? $x->getUri() : null, $imported);
-        $toRemove     = array_diff($existingUris, $importedUris);
-        foreach ($toRemove as $resUri) {
-            echo self::$debug > 1 ? "\tRemoving $resUri\n" : '';
-            $existing[$resUri]->delete(true);
-        }
+        $this->removeObsolete();
 
         return $imported;
     }
@@ -666,6 +650,29 @@ class SkosVocabulary extends MetadataCollection {
             foreach ($res->propertyUris() as $prop) {
                 $res->delete($prop);
             }
+        }
+    }
+
+    /**
+     * 
+     * @param array<RepoResource> $imported
+     * @return void
+     */
+    private function removeObsolete(array $imported): void {
+        echo self::$debug ? "Removing obsolete resources\n" : '';
+        $importedUris      = array_map(fn($x) => $x instanceof RepoResource ? $x->getUri() : null, $imported);
+        $schema            = $this->repo->getSchema();
+        $term              = new SearchTerm([RDF::SKOS_IN_SCHEME, $schema->parent], $this->vocabularyUrl);
+        $cfg               = new SearchConfig();
+        $cfg->metadataMode = 'ids';
+        $existing          = iterator_to_array($this->repo->getResourcesBySearchTerms([
+                $term], $cfg));
+        $existingUris      = array_map(fn($x) => $x->getUri(), $existing);
+        $existing          = array_combine($existingUris, $existing);
+        $toRemove          = array_diff($existingUris, $importedUris);
+        foreach ($toRemove as $resUri) {
+            echo self::$debug > 1 ? "\tRemoving $resUri\n" : '';
+            $existing[$resUri]->delete(true);
         }
     }
 }
