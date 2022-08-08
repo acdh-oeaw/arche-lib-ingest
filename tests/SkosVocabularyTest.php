@@ -26,6 +26,7 @@
 
 namespace acdhOeaw\arche\lib\ingest\tests;
 
+use acdhOeaw\arche\lib\exception\NotFound;
 use acdhOeaw\arche\lib\ingest\SkosVocabulary;
 
 /**
@@ -38,21 +39,73 @@ class SkosVocabularyTest extends TestBase {
     static public function setUpBeforeClass(): void {
         parent::setUpBeforeClass();
 
-        //SkosVocabulary::$debug = 2;
+        SkosVocabulary::$debug = 0;
     }
-    
+
     /**
      * @group SkosVocabulary
      */
     public function testSimple(): void {
         self::$test = 'testSimple';
 
-        $vocab = new SkosVocabulary(self::$repo, __DIR__ . '/data/skosVocabulary.ttl');
+        $vocab    = new SkosVocabulary(self::$repo, __DIR__ . '/data/skosVocabulary.ttl');
         $vocab->preprocess();
         self::$repo->begin();
         $imported = $vocab->import();
         self::$repo->commit();
         $this->noteResources($imported);
-        $this->assertCount(5, $imported);
+        $this->assertCount(3, $imported);
+    }
+
+    /**
+     * @group SkosVocabulary
+     */
+    public function testRemoveObsolete(): void {
+        self::$test = 'removeObsolete';
+        $schema     = self::$repo->getSchema();
+
+        $vocab    = new SkosVocabulary(self::$repo, __DIR__ . '/data/skosVocabulary.ttl');
+        $vocab->resource('https://foo/scheme/3')->copy([$schema->id], '/^$/', 'https://foo/scheme/9', $vocab);
+        $vocab->preprocess();
+        self::$repo->begin();
+        $imported = $vocab->import();
+        self::$repo->commit();
+        $this->noteResources($imported);
+        $this->assertCount(4, $imported);
+
+        $vocab    = new SkosVocabulary(self::$repo, __DIR__ . '/data/skosVocabulary.ttl');
+        $vocab->forceUpdate();
+        $vocab->preprocess();
+        self::$repo->begin();
+        $imported = $vocab->import();
+        self::$repo->commit();
+        $this->noteResources($imported);
+        $this->assertCount(3, $imported);
+
+        try {
+            self::$repo->getResourceById('https://foo/scheme/9');
+            $this->assertTrue(false, "https://foo/scheme/9 hasn't been removed");
+        } catch (NotFound $ex) {
+            $this->assertTrue(true);
+        }
+    }
+
+    /**
+     * @group SkosVocabulary
+     */
+    public function testImportEverything(): void {
+        self::$test = 'ingestEverything';
+
+        $vocab    = (new SkosVocabulary(self::$repo, __DIR__ . '/data/skosVocabulary.ttl'))
+            ->setExactMatchMode(SkosVocabulary::EXACTMATCH_KEEP, SkosVocabulary::EXACTMATCH_KEEP)
+            ->setSkosRelationsMode(SkosVocabulary::RELATIONS_KEEP, SkosVocabulary::RELATIONS_KEEP)
+            ->setEnforceLiterals(false)
+            ->setImportCollections(true)
+            ->preprocess();
+        self::$repo->begin();
+        $imported = $vocab->import();
+        self::$repo->commit();
+        $this->noteResources($imported);
+        $this->assertCount(7, $imported);
     }
 }

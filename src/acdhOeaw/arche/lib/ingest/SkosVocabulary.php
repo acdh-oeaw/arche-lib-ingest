@@ -34,8 +34,10 @@ use GuzzleHttp\Client;
 use GuzzleHttp\Psr7\Request;
 use zozlak\RdfConstants as RDF;
 use acdhOeaw\arche\lib\Repo;
-use acdhOeaw\arche\lib\RepoResource;
+use acdhOeaw\arche\lib\SearchConfig;
+use acdhOeaw\arche\lib\SearchTerm;
 use acdhOeaw\arche\lib\BinaryPayload;
+use acdhOeaw\arche\lib\RepoResource;
 use acdhOeaw\arche\lib\exception\NotFound;
 use acdhOeaw\arche\lib\RepoResourceInterface as RRI;
 
@@ -144,7 +146,15 @@ class SkosVocabulary extends MetadataCollection {
      * Should all properties other then id, rdf:class, and skos relations be
      * casted to literals?
      */
-    private bool $enforceLiterals = false;
+    private bool $enforceLiterals = true;
+
+    /**
+     * Should skos:concept, skos:collection adn skos:orderedCollection resources
+     * be connected with the skos:schema repository resource with the repository's
+     * parent RDF property?
+     * @var bool
+     */
+    private bool $addParentProperty = true;
 
     /**
      * RDF properties to use for repository resource titles.
@@ -211,6 +221,13 @@ class SkosVocabulary extends MetadataCollection {
         return $this->state;
     }
 
+    public function forceUpdate(): self {
+        if ($this->state === self::STATE_OK) {
+            $this->state = self::STATE_UPDATE;
+        }
+        return $this;
+    }
+
     /**
      * Set RDF property filter for skos resources
      * 
@@ -271,8 +288,7 @@ class SkosVocabulary extends MetadataCollection {
      * @return self
      */
     public function setSkosRelationsMode(string $inVocabulary,
-                                         string $notInVocabulary,
-                                         string $collections): self {
+                                         string $notInVocabulary): self {
         $allowed = [self::RELATIONS_DROP, self::RELATIONS_KEEP, self::RELATIONS_LITERAL];
         if (!in_array($inVocabulary, $allowed) || !in_array($notInVocabulary, $allowed)) {
             throw new BadMethodCallException("Wrong inVocabulary od notInVocabulary parameter value");
@@ -295,13 +311,33 @@ class SkosVocabulary extends MetadataCollection {
     }
 
     /**
-     * When $enforce is set to true, all non-SKOS properties
+     * When $enforce is set to true, all RDF properties of skos entities but 
+     * skos properties, repository id property and repository parent property
+     * are casted to literals.
+     * 
+     * This allows to avoid creation of unnecessary repository resources but
+     * can lead to resulting data being incompatible with ontologies they were
+     * following (as datatype and object properties are mutually exclusive in 
+     * owl) which may or might be a problem for you.
      * 
      * @param bool $enforce
      * @return self
      */
     public function setEnforceLiterals(bool $enforce): self {
         $this->enforceLiterals = $enforce;
+        return $this;
+    }
+
+    /**
+     * When $add is set to true, all repository resources representing imported 
+     * skos entities are linked with the skos:Schema repository resource with
+     * a repository's parent property.
+     * 
+     * @param bool $add
+     * @return self
+     */
+    public function setAddParentProperty(bool $add): self {
+        $this->addParentProperty = $add;
         return $this;
     }
 
@@ -336,21 +372,35 @@ class SkosVocabulary extends MetadataCollection {
             ];
             $collections = array_unique(array_map(fn($x) => $x->getUri(), array_merge($collections[0], $collections[1])));
         }
+
+        // preprocess
+        $concepts            = $this->processExactMatches($concepts);
         $entities            = array_merge([$this->vocabularyUrl], $concepts);
         $entitiesCollections = array_merge($entities, $collections);
 
-        // preprocess
-        $this->processExactMatches($concepts);
         $this->processRelations($entities);
         $this->assureTitles($entitiesCollections);
         $this->dropProperties($entitiesCollections);
         $this->assureLiterals($entitiesCollections);
+        $this->assureParents($entitiesCollections);
         $this->dropNodes($entitiesCollections);
         parent::preprocess();
 
         return $this;
     }
 
+    /**
+     * Ingests the vocabulary and removes obsolete vocabulary entities (repository
+     * resources which were not a part of the ingestion but point to the schema
+     * repository resource with skos:inScheme or repoCfg:parent)
+     * 
+     * @param string $namespace
+     * @param int $singleOutNmsp
+     * @param string $errorMode
+     * @param int $concurrency
+     * @param int $retriesOnConflict
+     * @return array<RepoResource|ClientException>
+     */
     public function import(string $namespace = '',
                            int $singleOutNmsp = self::CREATE,
                            string $errorMode = self::ERRMODE_FAIL,
@@ -360,15 +410,34 @@ class SkosVocabulary extends MetadataCollection {
             return [];
         }
 
+        // remember the list of initially existing entities
+        $schema            = $this->repo->getSchema();
+        $term              = new SearchTerm([RDF::SKOS_IN_SCHEME, $schema->parent], $this->vocabularyUrl);
+        $cfg               = new SearchConfig();
+        $cfg->metadataMode = 'ids';
+        $existing          = iterator_to_array($this->repo->getResourcesBySearchTerms([
+                $term], $cfg));
+        $existingUris      = array_map(fn($x) => $x->getUri(), $existing);
+        $existing          = array_combine($existingUris, $existing);
+
+        // perform the inestion
         $imported = parent::import($namespace, $singleOutNmsp, $errorMode, $concurrency, $retriesOnConflict);
 
         // upload vocabulary binary
         echo self::$debug ? "Uploading vocabulary binary\n" : '';
-        $repoRes    = $this->repo->getResourceById($this->vocabularyUrl);
-        $payload    = new BinaryPayload(null, $this->file, $this->format ?? null);
+        $repoRes = $this->repo->getResourceById($this->vocabularyUrl);
+        $payload = new BinaryPayload(null, $this->file, $this->format ?? null);
         echo self::$debug ? "Updating " . $repoRes->getUri() . "\n" : '';
         $repoRes->updateContent($payload, RRI::META_NONE);
-        $imported[] = $repoRes;
+
+        // remove obsolete entities
+        echo self::$debug ? "Removing obsolete reosources\n" : '';
+        $importedUris = array_map(fn($x) => $x instanceof RepoResource ? $x->getUri() : null, $imported);
+        $toRemove     = array_diff($existingUris, $importedUris);
+        foreach ($toRemove as $resUri) {
+            echo self::$debug > 1 ? "\tRemoving $resUri\n" : '';
+            $existing[$resUri]->delete(true);
+        }
 
         return $imported;
     }
@@ -406,13 +475,14 @@ class SkosVocabulary extends MetadataCollection {
     /**
      * 
      * @param array<string> $entities
-     * @return void
+     * @return array<string>
      */
-    private function processExactMatches(array $entities): void {
+    private function processExactMatches(array $entities): array {
         if ($this->exactMatchMode === self::EXACTMATCH_KEEP && $this->exactMatchModeSchema === self::EXACTMATCH_KEEP) {
-            return;
+            return $entities;
         }
 
+        $drop = [];
         echo self::$debug ? "Processing skos:exactMatch...\n" : "";
         foreach ($entities as $resUri) {
             $res = $this->resource($resUri);
@@ -421,16 +491,20 @@ class SkosVocabulary extends MetadataCollection {
                 if ($mode === self::EXACTMATCH_DROP) {
                     echo self::$debug > 1 ? "\tRemoving <" . $res->getUri() . "> skos:exactMatch <" . $obj->getUri() . ">\n" : '';
                     $res->delete(RDF::SKOS_EXACT_MATCH, $obj);
+                    $drop[] = $obj->getUri();
                 } elseif ($mode === self::EXACTMATCH_LITERAL) {
                     echo self::$debug > 1 ? "\tTurning <" . $res->getUri() . "> skos:exactMatch <" . $obj->getUri() . "> into literal\n" : '';
                     $res->delete(RDF::SKOS_EXACT_MATCH, $obj);
                     $res->add(RDF::SKOS_EXACT_MATCH, new Literal($obj->getUri(), null, RDF::XSD_ANY_URI));
+                    $drop[] = $obj->getUri();
                 } elseif ($mode === self::EXACTMATCH_MERGE) {
                     echo self::$debug > 1 ? "\tMerging <" . $obj->getUri() . "> into <" . $res->getUri() . ">\n" : '';
                     $this->mergeConcepts($res, $obj);
+                    $drop[] = $obj->getUri();
                 }
             }
         }
+        return array_diff($entities, $drop);
     }
 
     /**
@@ -503,7 +577,8 @@ class SkosVocabulary extends MetadataCollection {
         if (!$this->enforceLiterals) {
             return;
         }
-        $allowed = [$this->repo->getSchema()->id, RDF::RDF_TYPE];
+        $schema  = $this->repo->getSchema();
+        $allowed = [$schema->id, $schema->parent, RDF::RDF_TYPE];
         echo self::$debug ? "Mapping resources to literals...\n" : "";
         foreach ($entities as $resUri) {
             $res = $this->resource($resUri);
@@ -517,6 +592,17 @@ class SkosVocabulary extends MetadataCollection {
                 }
                 $res->deleteResource($prop);
             }
+        }
+    }
+
+    private function assureParents(array $entities): void {
+        if (!$this->addParentProperty) {
+            return;
+        }
+        $parentProp = $this->repo->getSchema()->parent;
+        foreach ($entities as $resUri) {
+            $res = $this->resource($resUri);
+            $res->addResource($parentProp, $this->vocabularyUrl);
         }
     }
 
