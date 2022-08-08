@@ -165,6 +165,23 @@ class SkosVocabularyTest extends TestBase {
         unset($vocab);
     }
 
+    /**
+     * @group SkosVocabulary
+     */
+    public function testExactMatchLiteral(): void {
+        $vocab    = new SkosVocabulary(self::$repo, __DIR__ . '/data/skosVocabulary.ttl');
+        $vocab->setExactMatchMode(SkosVocabulary::EXACTMATCH_LITERAL, SkosVocabulary::EXACTMATCH_DROP);
+        $vocab->preprocess();
+        self::$repo->begin();
+        $imported = $vocab->import();
+        self::$repo->commit();
+        $this->noteResources($imported);
+        $this->assertCount(4, $imported);
+    }
+
+    /**
+     * @group SkosVocabulary
+     */
     public function testErrors(): void {
         $tmpFile = tempnam(sys_get_temp_dir(), '');
 
