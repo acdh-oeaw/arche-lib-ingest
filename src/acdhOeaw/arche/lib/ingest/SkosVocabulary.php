@@ -431,7 +431,7 @@ class SkosVocabulary extends MetadataCollection {
         $repoRes->updateContent($payload, RRI::META_NONE);
 
         // remove obsolete entities
-        echo self::$debug ? "Removing obsolete reosources\n" : '';
+        echo self::$debug ? "Removing obsolete resources\n" : '';
         $importedUris = array_map(fn($x) => $x instanceof RepoResource ? $x->getUri() : null, $imported);
         $toRemove     = array_diff($existingUris, $importedUris);
         foreach ($toRemove as $resUri) {
@@ -491,12 +491,10 @@ class SkosVocabulary extends MetadataCollection {
                 if ($mode === self::EXACTMATCH_DROP) {
                     echo self::$debug > 1 ? "\tRemoving <" . $res->getUri() . "> skos:exactMatch <" . $obj->getUri() . ">\n" : '';
                     $res->delete(RDF::SKOS_EXACT_MATCH, $obj);
-                    $drop[] = $obj->getUri();
                 } elseif ($mode === self::EXACTMATCH_LITERAL) {
                     echo self::$debug > 1 ? "\tTurning <" . $res->getUri() . "> skos:exactMatch <" . $obj->getUri() . "> into literal\n" : '';
                     $res->delete(RDF::SKOS_EXACT_MATCH, $obj);
                     $res->add(RDF::SKOS_EXACT_MATCH, new Literal($obj->getUri(), null, RDF::XSD_ANY_URI));
-                    $drop[] = $obj->getUri();
                 } elseif ($mode === self::EXACTMATCH_MERGE) {
                     echo self::$debug > 1 ? "\tMerging <" . $obj->getUri() . "> into <" . $res->getUri() . ">\n" : '';
                     $this->mergeConcepts($res, $obj);
@@ -549,12 +547,15 @@ class SkosVocabulary extends MetadataCollection {
         if ($this->allowedNmsp === null) {
             return;
         }
+        $allowedNmsp = [RDF::RDF_TYPE, $this->repo->getSchema()->id];
+        $allowedNmsp = array_merge($allowedNmsp, $this->allowedNmsp);
+
         echo self::$debug ? "Removing properties outside of allowed namespaces...\n" : "";
         foreach ($entities as $resUri) {
             $res = $this->resource($resUri);
             foreach ($res->propertyUris() as $prop) {
                 $delete = true;
-                foreach ($this->allowedNmsp as $nmsp) {
+                foreach ($allowedNmsp as $nmsp) {
                     if (str_starts_with($prop, $nmsp)) {
                         $delete = false;
                         break;
