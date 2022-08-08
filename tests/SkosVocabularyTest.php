@@ -168,15 +168,24 @@ class SkosVocabularyTest extends TestBase {
     /**
      * @group SkosVocabulary
      */
-    public function testExactMatchLiteral(): void {
-        $vocab    = new SkosVocabulary(self::$repo, __DIR__ . '/data/skosVocabulary.ttl');
-        $vocab->setExactMatchMode(SkosVocabulary::EXACTMATCH_LITERAL, SkosVocabulary::EXACTMATCH_DROP);
+    public function testSkosAsLiteral(): void {
+        $vocab    = (new SkosVocabulary(self::$repo, __DIR__ . '/data/skosVocabulary.ttl'))
+            ->setExactMatchMode(SkosVocabulary::EXACTMATCH_LITERAL, SkosVocabulary::EXACTMATCH_DROP)
+            ->setSkosRelationsMode(SkosVocabulary::RELATIONS_LITERAL, SkosVocabulary::RELATIONS_LITERAL);
         $vocab->preprocess();
         self::$repo->begin();
         $imported = $vocab->import();
         self::$repo->commit();
         $this->noteResources($imported);
         $this->assertCount(4, $imported);
+        foreach ($imported as $i) {
+            $meta = $i->getGraph();
+            $this->assertCount(0, $meta->allResources(RDF::SKOS_EXACT_MATCH));
+            $this->assertCount(0, $meta->allResources(RDF::SKOS_IN_SCHEME));
+            if ($i->isA(RDF::SKOS_CONCEPT)) {
+                $this->assertCount(1, $meta->allLiteral(RDF::SKOS_IN_SCHEME));
+            }
+        }
     }
 
     /**
