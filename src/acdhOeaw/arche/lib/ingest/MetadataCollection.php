@@ -106,12 +106,16 @@ class MetadataCollection extends Graph {
      * Creates a new metadata parser.
      * 
      * @param Repo $repo
-     * @param string $file
+     * @param string|null $file
      * @param string|null $format
      */
-    public function __construct(Repo $repo, string $file, ?string $format = null) {
+    public function __construct(Repo $repo, ?string $file,
+                                ?string $format = null) {
         parent::__construct();
-        $this->parseFile($file, $format);
+
+        if (!empty($file)) {
+            $this->parseFile($file, $format);
+        }
 
         $this->repo = $repo;
         UriNormalizer::init();
