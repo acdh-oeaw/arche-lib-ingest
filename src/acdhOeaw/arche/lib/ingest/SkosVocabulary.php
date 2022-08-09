@@ -421,7 +421,7 @@ class SkosVocabulary extends MetadataCollection {
         $repoRes->updateContent($payload, RRI::META_NONE);
 
         // remove obsolete entities
-        $this->removeObsolete();
+        $this->removeObsolete($imported);
 
         return $imported;
     }
