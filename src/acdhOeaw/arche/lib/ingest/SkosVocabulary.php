@@ -691,5 +691,8 @@ class SkosVocabulary extends MetadataCollection {
             $toRemove = $tmp;
             $retriesOnConflict--;
         }
+        if (count($toRemove) > 0) {
+            throw new RepoLibException("Failed to remove all obsolete vocabulary children");
+        }
     }
 }
