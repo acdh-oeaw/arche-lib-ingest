@@ -32,6 +32,7 @@ use EasyRdf\Literal;
 use EasyRdf\Resource;
 use GuzzleHttp\Client;
 use GuzzleHttp\Psr7\Request;
+use GuzzleHttp\Promise\RejectedPromise;
 use zozlak\RdfConstants as RDF;
 use acdhOeaw\arche\lib\Repo;
 use acdhOeaw\arche\lib\SearchConfig;
@@ -421,7 +422,7 @@ class SkosVocabulary extends MetadataCollection {
         $repoRes->updateContent($payload, RRI::META_NONE);
 
         // remove obsolete entities
-        $this->removeObsolete($imported);
+        $this->removeObsolete($imported, $concurrency, $retriesOnConflict);
 
         return $imported;
     }
@@ -656,9 +657,12 @@ class SkosVocabulary extends MetadataCollection {
     /**
      * 
      * @param array<RepoResource> $imported
+     * @param int $concurrency
+     * @param int $retriesOnConflict
      * @return void
      */
-    private function removeObsolete(array $imported): void {
+    private function removeObsolete(array $imported, int $concurrency = 3,
+                                    int $retriesOnConflict = 3): void {
         echo self::$debug ? "Removing obsolete resources\n" : '';
         $importedUris      = array_map(fn($x) => $x instanceof RepoResource ? $x->getUri() : null, $imported);
         $schema            = $this->repo->getSchema();
@@ -670,9 +674,22 @@ class SkosVocabulary extends MetadataCollection {
         $existingUris      = array_map(fn($x) => $x->getUri(), $existing);
         $existing          = array_combine($existingUris, $existing);
         $toRemove          = array_diff($existingUris, $importedUris);
-        foreach ($toRemove as $resUri) {
-            echo self::$debug > 1 ? "\tRemoving $resUri\n" : '';
-            $existing[$resUri]->delete(true);
+
+        $debug = self::$debug;
+        $f     = function (string $resUri, Repo $repo) use ($existing, $debug) {
+            echo $debug > 1 ? "\tRemoving $resUri\n" : '';
+            return $existing[$resUri]->deleteAsync(true);
+        };
+        while ($retriesOnConflict > 0 && count($toRemove) > 0) {
+            $results = $this->repo->map($toRemove, $f, $concurrency, Repo::REJECT_INCLUDE);
+            $tmp     = [];
+            foreach ($results as $n => $i) {
+                if ($i instanceof RejectedPromise) {
+                    $tmp[] = $toRemove[$n];
+                }
+            }
+            $toRemove = $tmp;
+            $retriesOnConflict--;
         }
     }
 }
