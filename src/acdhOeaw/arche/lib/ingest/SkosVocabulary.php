@@ -125,6 +125,12 @@ class SkosVocabulary extends MetadataCollection {
     private ?array $allowedNmsp = null;
 
     /**
+     * 
+     * @var array<string>|null
+     */
+    private ?array $allowedResourceNmsp = [];
+
+    /**
      * How to handle skos:exactMatch triples with object outside the current vocabulary
      */
     private string $exactMatchMode = self::EXACTMATCH_MERGE;
@@ -150,12 +156,6 @@ class SkosVocabulary extends MetadataCollection {
      * Should skos:Collection and skos:OrderedCollection resources be ingested?
      */
     private bool $importCollections = false;
-
-    /**
-     * Should all properties other then id, rdf:class, and skos relations be
-     * casted to literals?
-     */
-    private bool $enforceLiterals = true;
 
     /**
      * Should skos:concept, skos:collection adn skos:orderedCollection resources
@@ -252,6 +252,29 @@ class SkosVocabulary extends MetadataCollection {
     }
 
     /**
+     * Defines namespaces of RDF properties allowed to keep object values.
+     * 
+     * SKOS properties, id, parent and rdf:type RDF properties are always allowed
+     * to have object values.
+     * 
+     * Object values of other properties of SKOS entities will be turned into
+     * literals of type xsd:anyURI.
+     * 
+     * Such an approach prevents creation of unnecessary repository resources but
+     * can lead to resulting data being incompatible with ontologies they were
+     * following (as datatype and object properties are mutually exclusive in 
+     * owl) which may or might be a problem for you.
+     * 
+     * @param array<string>|null $allowed List of allowed namespaces. When null,
+     *   all object values are kept.
+     * @return self
+     */
+    public function setAllowedResourceNamespaces(?array $allowed): self {
+        $this->allowedResourceNmsp = $allowed;
+        return $this;
+    }
+
+    /**
      * Sets up skos:exactMatch RDF triples handling where the object belongs or
      * not belongs to a current vocabulary.
      * 
@@ -319,24 +342,6 @@ class SkosVocabulary extends MetadataCollection {
      */
     public function setImportCollections(bool $import): self {
         $this->importCollections = $import;
-        return $this;
-    }
-
-    /**
-     * When $enforce is set to true, all RDF properties of skos entities but 
-     * skos properties, repository id property and repository parent property
-     * are casted to literals.
-     * 
-     * This allows to avoid creation of unnecessary repository resources but
-     * can lead to resulting data being incompatible with ontologies they were
-     * following (as datatype and object properties are mutually exclusive in 
-     * owl) which may or might be a problem for you.
-     * 
-     * @param bool $enforce
-     * @return self
-     */
-    public function setEnforceLiterals(bool $enforce): self {
-        $this->enforceLiterals = $enforce;
         return $this;
     }
 
@@ -573,17 +578,19 @@ class SkosVocabulary extends MetadataCollection {
      * @return void
      */
     private function assureLiterals(array $entities): void {
-        if (!$this->enforceLiterals) {
+        if ($this->allowedResourceNmsp === null) {
             return;
         }
         $schema  = $this->repo->getSchema();
-        $allowed = [$schema->id, $schema->parent, RDF::RDF_TYPE];
+        $allowed = array_merge([$schema->id, $schema->parent, RDF::RDF_TYPE, RDF::NMSP_SKOS], $this->allowedResourceNmsp);
         echo self::$debug ? "Mapping resources to literals...\n" : "";
         foreach ($entities as $resUri) {
             $res = $this->resource($resUri);
             foreach ($res->propertyUris() as $prop) {
-                if (in_array($prop, $allowed) || str_starts_with($prop, self::NMSP_SKOS)) {
-                    continue;
+                foreach ($allowed as $i) {
+                    if (str_starts_with($prop, $i)) {
+                        continue;
+                    }
                 }
                 foreach ($res->allResources($prop) as $i) {
                     echo self::$debug > 1 ? "\t<" . $res->getUri() . "> <$prop> '$i'\n" : '';
