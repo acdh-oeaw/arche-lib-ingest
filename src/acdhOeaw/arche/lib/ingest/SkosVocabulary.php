@@ -104,7 +104,8 @@ class SkosVocabulary extends MetadataCollection {
         $client  = new Client();
         $headers = ['Accept' => 'text/turtle;q=1, application/rdf+xml;q=0.8, application/n-triples;q=0.6, application/ld+json;q=0.4'];
         $resp    = $client->send(new Request('get', $url, $headers));
-        $format  = $resp->getHeader('Content-Type')[0] ?? null;
+        $format  = $resp->getHeader('Content-Type')[0] ?? '';
+        $format  = explode(';', $format)[0] ?? null;
         file_put_contents($tmpFile, (string) $resp->getBody());
         try {
             return new self($repo, $tmpFile, $format, $url);
