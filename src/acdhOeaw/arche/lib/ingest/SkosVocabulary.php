@@ -588,8 +588,8 @@ class SkosVocabulary extends MetadataCollection {
                 foreach ($res->allResources($prop) as $i) {
                     echo self::$debug > 1 ? "\t<" . $res->getUri() . "> <$prop> '$i'\n" : '';
                     $res->addLiteral($prop, new Literal($i->getUri(), null, RDF::XSD_ANY_URI));
+                    $res->deleteResource($prop, $i);
                 }
-                $res->deleteResource($prop);
             }
         }
     }
