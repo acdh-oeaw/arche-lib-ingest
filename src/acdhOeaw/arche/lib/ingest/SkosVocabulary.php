@@ -589,7 +589,7 @@ class SkosVocabulary extends MetadataCollection {
             foreach ($res->propertyUris() as $prop) {
                 foreach ($allowed as $i) {
                     if (str_starts_with($prop, $i)) {
-                        continue;
+                        continue 2;
                     }
                 }
                 foreach ($res->allResources($prop) as $i) {
