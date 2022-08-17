@@ -43,6 +43,7 @@ use acdhOeaw\arche\lib\RepoResource;
 use acdhOeaw\arche\lib\RepoResourceInterface as RRI;
 use acdhOeaw\arche\lib\exception\NotFound;
 use acdhOeaw\arche\lib\exception\RepoLibException;
+
 ;
 
 /**
@@ -238,7 +239,9 @@ class SkosVocabulary extends MetadataCollection {
     }
 
     /**
-     * Set RDF property filter for skos resources
+     * Set RDF property filter for skos resources.
+     * 
+     * Repository id and label properties are always allowed.
      * 
      * @param array<string>|null $nmsp null allows all properties
      * @return self
@@ -541,7 +544,8 @@ class SkosVocabulary extends MetadataCollection {
         if ($this->allowedNmsp === null) {
             return;
         }
-        $allowedNmsp = [RDF::RDF_TYPE, $this->repo->getSchema()->id];
+        $schema      = $this->repo->getSchema();
+        $allowedNmsp = [RDF::RDF_TYPE, $schema->id, $schema->label];
         $allowedNmsp = array_merge($allowedNmsp, $this->allowedNmsp);
 
         echo self::$debug ? "Removing properties outside of allowed namespaces...\n" : "";
