@@ -33,14 +33,17 @@ use EasyRdf\Resource;
 use GuzzleHttp\Client;
 use GuzzleHttp\Psr7\Request;
 use GuzzleHttp\Promise\RejectedPromise;
+use GuzzleHttp\Exception\ClientException;
 use zozlak\RdfConstants as RDF;
 use acdhOeaw\arche\lib\Repo;
 use acdhOeaw\arche\lib\SearchConfig;
 use acdhOeaw\arche\lib\SearchTerm;
 use acdhOeaw\arche\lib\BinaryPayload;
 use acdhOeaw\arche\lib\RepoResource;
-use acdhOeaw\arche\lib\exception\NotFound;
 use acdhOeaw\arche\lib\RepoResourceInterface as RRI;
+use acdhOeaw\arche\lib\exception\NotFound;
+use acdhOeaw\arche\lib\exception\RepoLibException;
+;
 
 /**
  * A specialization of the MetadataCollection class for ingesting SKOS
@@ -73,7 +76,11 @@ class SkosVocabulary extends MetadataCollection {
     const RELATIONS_DROP     = 'drop';
     const RELATIONS_LITERAL  = 'literal';
 
-    static private $skosRelations = [
+    /**
+     * 
+     * @var array<string>
+     */
+    static private array $skosRelations = [
         RDF::SKOS_BROADER,
         RDF::SKOS_BROADER_TRANSITIVE,
         RDF::SKOS_BROAD_MATCH,
@@ -92,7 +99,7 @@ class SkosVocabulary extends MetadataCollection {
     ];
 
     static public function fromUrl(Repo $repo, string $url): self {
-        $tmpFile = tempnam(sys_get_temp_dir(), 'skosvocab');
+        $tmpFile = (string) tempnam(sys_get_temp_dir(), 'skosvocab');
         $client  = new Client();
         $headers = ['Accept' => 'text/turtle;q=1, application/rdf+xml;q=0.8, application/n-triples;q=0.6, application/ld+json;q=0.4'];
         $resp    = $client->send(new Request('get', $url, $headers));
@@ -173,7 +180,7 @@ class SkosVocabulary extends MetadataCollection {
         }
 
         // make a copy of the vocabulary file as it will be needed on import()
-        $this->file = tempnam(sys_get_temp_dir(), 'skosvocab');
+        $this->file = (string) tempnam(sys_get_temp_dir(), 'skosvocab');
         copy($file, $this->file);
 
         // make sure the RDF graph contains exactly one vocabulary
@@ -194,13 +201,14 @@ class SkosVocabulary extends MetadataCollection {
         try {
             $repoRes     = $this->repo->getResourceById($this->vocabularyUrl);
             $repoRes->loadMetadata(false, RRI::META_RESOURCE, null, [$schema->hash]);
-            list($hashName, $repoResHash) = explode(':', $repoRes->getGraph()->getLiteral($schema->hash));
+            list($hashName, $repoResHash) = explode(':', (string) $repoRes->getGraph()->getLiteral($schema->hash));
             $hash        = hash_init($hashName);
             hash_update_file($hash, $file);
             $hash        = hash_final($hash, false);
             $this->state = $hash === $repoResHash ? self::STATE_OK : self::STATE_UPDATE;
         } catch (NotFound $ex) {
             $this->state = self::STATE_NEW;
+            $hash        = '';
         }
         echo self::$debug ? "Vocabulary state $this->state ($this->vocabularyUrl, " . $repoRes?->getUri() . ", $hash, $repoResHash)\n" : '';
     }
@@ -348,7 +356,7 @@ class SkosVocabulary extends MetadataCollection {
      * 
      * First property providing a title value is being used.
      * 
-     * @param array $properties
+     * @param array<string> $properties
      * @return self
      */
     public function setTitleProperties(array $properties): self {
@@ -416,6 +424,7 @@ class SkosVocabulary extends MetadataCollection {
 
         // upload vocabulary binary
         echo self::$debug ? "Uploading vocabulary binary\n" : '';
+        /** @var RepoResource $repoRes */
         $repoRes = $this->repo->getResourceById($this->vocabularyUrl);
         $payload = new BinaryPayload(null, $this->file, $this->format ?? null);
         echo self::$debug ? "Updating " . $repoRes->getUri() . "\n" : '';
@@ -496,7 +505,7 @@ class SkosVocabulary extends MetadataCollection {
      * @return void
      */
     private function assureTitles(array $entities): void {
-        if ($this->titleProperties === null) {
+        if (count($this->titleProperties) === 0) {
             return;
         }
         echo self::$debug ? "Processing titles...\n" : "";
@@ -581,6 +590,11 @@ class SkosVocabulary extends MetadataCollection {
         }
     }
 
+    /**
+     * 
+     * @param array<string> $entities
+     * @return void
+     */
     private function assureParents(array $entities): void {
         if (!$this->addParentProperty) {
             return;
@@ -617,7 +631,7 @@ class SkosVocabulary extends MetadataCollection {
         $toDrop = array_map(fn($x) => $x->getUri(), $this->resources());
         $toDrop = array_diff($toDrop, $valid);
         foreach ($toDrop as $resUri) {
-            echo self::$debug > 1 ? "\t$res\n" : '';
+            echo self::$debug > 1 ? "\t$resUri\n" : '';
             $res = $this->resource($resUri);
             // there's no need to care about reverse properties as resources
             // to delete form a separate subgraph
@@ -656,7 +670,7 @@ class SkosVocabulary extends MetadataCollection {
 
     /**
      * 
-     * @param array<RepoResource> $imported
+     * @param array<RepoResource|ClientException> $imported
      * @param int $concurrency
      * @param int $retriesOnConflict
      * @return void
@@ -669,8 +683,8 @@ class SkosVocabulary extends MetadataCollection {
         $term              = new SearchTerm([RDF::SKOS_IN_SCHEME, $schema->parent], $this->vocabularyUrl);
         $cfg               = new SearchConfig();
         $cfg->metadataMode = 'ids';
-        $existing          = iterator_to_array($this->repo->getResourcesBySearchTerms([
-                $term], $cfg));
+        $existing          = $this->repo->getResourcesBySearchTerms([$term], $cfg);
+        $existing          = iterator_to_array($existing);
         $existingUris      = array_map(fn($x) => $x->getUri(), $existing);
         $existing          = array_combine($existingUris, $existing);
         $toRemove          = array_diff($existingUris, $importedUris);
