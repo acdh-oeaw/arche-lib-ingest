@@ -106,7 +106,7 @@ class SkosVocabularyTest extends TestBase {
         $vocab    = (new SkosVocabulary(self::$repo, __DIR__ . '/data/skosVocabulary.ttl'))
             ->setExactMatchMode(SkosVocabulary::EXACTMATCH_KEEP, SkosVocabulary::EXACTMATCH_KEEP)
             ->setSkosRelationsMode(SkosVocabulary::RELATIONS_KEEP, SkosVocabulary::RELATIONS_KEEP)
-            ->setEnforceLiterals(false)
+            ->setAllowedResourceNamespaces(null)
             ->setImportCollections(true)
             ->preprocess();
         self::$repo->begin();
@@ -130,7 +130,7 @@ class SkosVocabularyTest extends TestBase {
         $vocab    = (new SkosVocabulary(self::$repo, __DIR__ . '/data/skosVocabulary.ttl'))
             ->setExactMatchMode(SkosVocabulary::EXACTMATCH_DROP, SkosVocabulary::EXACTMATCH_DROP)
             ->setSkosRelationsMode(SkosVocabulary::RELATIONS_DROP, SkosVocabulary::RELATIONS_DROP)
-            ->setEnforceLiterals(true)
+            ->setAllowedResourceNamespaces([])
             ->setImportCollections(false)
             ->setAddParentProperty(false)
             ->setAllowedNamespaces([])
