@@ -521,8 +521,8 @@ class SkosVocabulary extends MetadataCollection {
             if ($res->getLiteral($titleProp) !== null) {
                 continue;
             }
+            $added = false;
             foreach ($this->titleProperties as $prop) {
-                $added = false;
                 foreach ($res->all($prop) as $i) {
                     if (!($i instanceof Literal)) {
                         $i = new Literal((string) $i, 'und');
