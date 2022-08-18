@@ -514,9 +514,6 @@ class SkosVocabulary extends MetadataCollection {
      * @return void
      */
     private function assureTitles(array $entities): void {
-        if (count($this->titleProperties) === 0) {
-            return;
-        }
         echo self::$debug ? "Processing titles...\n" : "";
         $titleProp = $this->repo->getSchema()->label;
         foreach ($entities as $resUri) {
@@ -537,6 +534,9 @@ class SkosVocabulary extends MetadataCollection {
                 if ($added) {
                     break;
                 }
+            }
+            if (!$added) {
+                $res->addLiteral($titleProp, new Literal($resUri, 'und'));
             }
         }
     }
