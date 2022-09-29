@@ -619,7 +619,7 @@ class Indexer {
             }
         }
         // normalize ids
-        $this->uriNorm->normalizeMeta($extMeta);
+        $this->uriNorm->normalizeMeta($extMeta, '', false);
 
         return new File($file, $extMeta, $this->repo);
     }

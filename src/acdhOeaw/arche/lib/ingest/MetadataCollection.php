@@ -526,7 +526,7 @@ class MetadataCollection extends Graph {
 
         foreach ($res->propertyUris() as $prop) {
             // because every triple object creates a repo resource and therefore ends up as an id
-            UriNormalizer::gNormalizeMeta($res, $prop);
+            UriNormalizer::gNormalizeMeta($res, $prop, false);
         }
 
         if ($this->containsWrongRefs($res)) {
