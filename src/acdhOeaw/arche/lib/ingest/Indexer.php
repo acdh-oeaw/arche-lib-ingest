@@ -265,7 +265,7 @@ class Indexer {
         $this->binaryClass     = $this->schema->ingest->defaultBinaryClass;
         $this->collectionClass = $this->schema->ingest->defaultCollectionClass;
         $this->directoryLength = strlen(self::pathToUtf8($this->directory));
-        $this->uriNorm         = UriNormalizer::factory($this->schema->id);
+        $this->uriNorm         = new UriNormalizer(null, $this->schema->id);
         $this->metaLookup      = new MetaLookupConstant((new Graph())->resource('.'));
     }
 

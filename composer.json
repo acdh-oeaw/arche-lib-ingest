@@ -15,7 +15,7 @@
         "guzzlehttp/guzzle": "^7",
         "acdh-oeaw/arche-lib": ">=4 <6",
         "acdh-oeaw/easyrdf": ">=0.13.5",
-        "acdh-oeaw/uri-normalizer": "^1",
+        "acdh-oeaw/uri-normalizer": "^2",
         "zozlak/rdf-constants": "^1.2.1"
     },
     "autoload": {
