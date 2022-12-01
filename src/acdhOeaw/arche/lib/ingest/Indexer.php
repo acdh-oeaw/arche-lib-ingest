@@ -553,6 +553,7 @@ class Indexer {
      * @return array<File>
      */
     private function listFiles(SplFileInfo $dir, int $level): array {
+        $t0    = time();
         $iter  = new DirectoryIterator($dir->getPathname());
         $files = [];
         foreach ($iter as $n => $file) {
@@ -568,6 +569,11 @@ class Indexer {
                 }
             } elseif ($file->isDir() && !$file->isDot() && $level < $this->depth) {
                 $files = array_merge($files, $this->listFiles($file, $level + 1));
+            }
+            $t = time();
+            if ($t - $t0 > 10 && $this->repo->inTransaction()) {
+                $this->repo->prolong();
+                $t0 = $t;
             }
         }
         if (!$this->flatStructure && $level > 0 && (($n ?? 0) > 0 || $this->includeEmpty)) {
