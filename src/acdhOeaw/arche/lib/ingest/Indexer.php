@@ -476,6 +476,10 @@ class Indexer {
      *     turns off the autocommit but ingestion is continued. The returned 
      *     array contains RepoResource objects for successful ingestions and
      *     Exception objects for failed ones.
+     *   - Indexer::ERRMODE_CONTINUE - just continue the import no matter if
+     *     errors were encountered. No error is ever thrown but the returned
+     *     list of ingested resources includes exception objects for resources
+     *     which failed to be uploaded.
      * @param int $concurrency number of parallel requests to the repository
      *   allowed during the import
      * @param int $retriesOnConflict how many ingestion attempts should be taken
@@ -504,7 +508,7 @@ class Indexer {
         $errors          = '';
         $chunkSize       = $this->autoCommit > 0 ? $this->autoCommit : min(count($filesToImport), 100 * $concurrency);
         for ($i = 0; $i < count($filesToImport); $i += $chunkSize) {
-            if ($this->autoCommit > 0 && $i > 0 && count($filesToImport) > $this->autoCommit && empty($errors)) {
+            if ($this->autoCommit > 0 && $i > 0 && count($filesToImport) > $this->autoCommit && (empty($errors) || $errorMode === self::ERRMODE_CONTINUE)) {
                 echo self::$debug ? "Autocommit\n" : '';
                 $commitedRepoRes = $allRepoRes;
                 $this->repo->commit();
@@ -532,7 +536,7 @@ class Indexer {
                     $errors .= "\t$msg\n";
                     echo self::$debug ? "\tERROR while processing " . $chunk[$n]->getPath() . ": $msg\n" : '';
                 }
-                if ($j instanceof RepoResource || $errorMode === self::ERRMODE_INCLUDE) {
+                if ($j instanceof RepoResource || $errorMode === self::ERRMODE_INCLUDE || $errorMode === self::ERRMODE_CONTINUE) {
                     $allRepoRes[] = $j;
                 }
             }
