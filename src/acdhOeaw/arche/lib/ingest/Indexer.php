@@ -54,9 +54,9 @@ class Indexer {
 
     const FILTER_MATCH      = 1;
     const FILTER_SKIP       = 2;
-    const SKIP_NONE         = 1;
-    const SKIP_NOT_EXIST    = 2;
-    const SKIP_EXIST        = 3;
+    const SKIP_NONE         = 0;
+    const SKIP_NOT_EXIST    = 1;
+    const SKIP_EXIST        = 2;
     const SKIP_BINARY_EXIST = 4;
     const VERSIONING_NONE   = 1;
     const VERSIONING_ALWAYS = 2;
@@ -67,6 +67,7 @@ class Indexer {
     const ERRMODE_FAIL      = 'fail';
     const ERRMODE_PASS      = 'pass';
     const ERRMODE_INCLUDE   = 'include';
+    const ERRMODE_CONTINUE  = 'continue';
     const ENC_UTF8          = 'utf-8';
 
     /**
@@ -301,22 +302,18 @@ class Indexer {
      * Defines if (and how) resources should be skipped from indexing based on
      * their (not)existance in the repository.
      * 
-     * @param int $skipMode mode. One of:
-     *   - Indexer::SKIP_NONE (default) - import no matter if a corresponding
-     *     repository resource exists or not, 
-     *   - Indexer::SKIP_NOT_EXIST - import only if a corresponding repo 
-     *     resource doesn't exist at the beginning of the ingestion,
-     *   - Indexer::SKIP_EXIST - import only if a corresponding repo resource
-     *     exists at the beginning of the ingestion, 
-     *   - Indexer::SKIP_BINARY_EXIST - import if a corresponding repo resource
-     *     doesn't exist or exists but contains no binary payload
+     * @param int $skipMode mode. Any combination of (with a binary union or sum):
+     *   - Indexer::SKIP_NONE (default) - import all resources, 
+     *   - Indexer::SKIP_NOT_EXIST - skip ingestion of all resources which don't
+     *     exist at the beginning of the ingestion.
+     *   - Indexer::SKIP_EXIST - skip ingestion of all resources which exist
+     *     at the beginning of the ingestion.
+     *   - Indexer::SKIP_BINARY_EXIST - skip ingestion of all resources which
+     *     already exist and either already have binary payload or are metadata
+     *     only resources.
      * @return Indexer
      */
     public function setSkip(int $skipMode): Indexer {
-        if (!in_array($skipMode, [self::SKIP_NONE, self::SKIP_NOT_EXIST, self::SKIP_EXIST,
-                self::SKIP_BINARY_EXIST])) {
-            throw new BadMethodCallException('Wrong skip mode');
-        }
         $this->skipMode = $skipMode;
         return $this;
     }
@@ -473,7 +470,7 @@ class Indexer {
      *     an exception.
      *   - Indexer::ERRMODE_PASS - the first encountered error turns 
      *     off the autocommit but ingestion is continued. When all resources are 
-     *     processed and there was no errors, an array of RepoResource objects 
+     *     processed andif there were no errors, an array of RepoResource objects 
      *     is returned. If there was an error, an exception is thrown.
      *   - Indexer::ERRMODE_INCLUDE - the first encountered error 
      *     turns off the autocommit but ingestion is continued. The returned 

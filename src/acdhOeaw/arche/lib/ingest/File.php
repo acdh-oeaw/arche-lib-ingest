@@ -113,7 +113,7 @@ class File {
 
         $promise = $this->repo->getResourceByIdsAsync($this->getIds());
         $promise = $promise->then(function (RepoResource $repoRes) {
-            $skip = $this->skipMode === Indexer::SKIP_EXIST || ($this->skipMode === Indexer::SKIP_BINARY_EXIST && $repoRes->hasBinaryContent());
+            $skip = ($this->skipMode & Indexer::SKIP_EXIST) || (($this->skipMode & Indexer::SKIP_BINARY_EXIST) && $repoRes->hasBinaryContent());
             if ($skip) {
                 echo ProgressMeter::format($this->meterId, $this->n, "Processing " . $this->info->getPathname() . " ({n}/{t} {p}%): skip\n");
                 return new SkippedException();
@@ -128,7 +128,7 @@ class File {
             if (!($error instanceof NotFound)) {
                 throw $error;
             }
-            if ($this->skipMode === Indexer::SKIP_NOT_EXIST) {
+            if ($this->skipMode & Indexer::SKIP_NOT_EXIST) {
                 return new SkippedException();
             }
             return $this->createAsync();
