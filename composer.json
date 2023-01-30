@@ -12,6 +12,7 @@
     ],
     "require": {
         "php": ">=8 <8.2",
+        "ext-iconv": "*",
         "guzzlehttp/guzzle": "^7",
         "acdh-oeaw/arche-lib": ">=4 <6",
         "acdh-oeaw/easyrdf": ">=0.13.5",

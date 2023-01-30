@@ -591,11 +591,15 @@ class Indexer {
         $dir    = $file->getPath();
         $schema = $this->repo->getSchema();
 
-        $id = self::pathToUtf8($path);
-        $id = str_replace('\\', '/', $id);
-        $id = substr($path, $this->directoryLength);
-        $id = str_replace('%2F', '/', rawurlencode($id));
-        $id = $this->idPrefix . $id;
+        if ($this->flatStructure) {
+            $id = $this->idPrefix . rawurlencode(self::pathToUtf8($file->getFilename()));
+        } else {
+            $id = self::pathToUtf8($path);
+            $id = str_replace('\\', '/', $id);
+            $id = substr($path, $this->directoryLength);
+            $id = str_replace('%2F', '/', rawurlencode($id));
+            $id = $this->idPrefix . $id;
+        }
 
         $extMeta = $this->metaLookup->getMetadata($path, [$id], $this->metaLookupRequire);
         // id
