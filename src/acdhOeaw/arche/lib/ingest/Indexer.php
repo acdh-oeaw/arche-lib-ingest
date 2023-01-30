@@ -493,6 +493,10 @@ class Indexer {
         }
         $pidPass = $this->pidPass === self::PID_PASS;
 
+        if ($this->flatStructure && substr($this->idPrefix, -1) !== '/') {
+            $this->idPrefix .= '/';
+        }
+
         // gather files from the filesystem
         $filesToImport = $this->listFiles(new SplFileInfo($this->directory), 0);
         $meterId       = self::$debug ? (string) microtime(true) : null;
