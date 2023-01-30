@@ -91,7 +91,7 @@ class Indexer {
                 $ctype = (string) preg_replace('|^.*[.]|', '', $ctype);
                 if (is_numeric($ctype)) {
                     self::$pathEncoding = 'windows-' . $ctype;
-                } else if (preg_match('|utf-?8|i', $ctype)) {
+                } else if (preg_match('|utf-?8|i', $ctype) || PHP_OS === 'Linux') {
                     self::$pathEncoding = 'utf-8';
                 } else {
                     throw new RuntimeException('Operation system encoding can not be determined');
