@@ -89,12 +89,12 @@ class Redmine {
      * @param int|null $done
      * @param string $message
      * @param bool $append
-     * @return void
+     * @return int id of the actually updated redmine issue
      * @throws RuntimeException
      */
     public function updateIssue(int $issueId, string $subtask, bool $status,
                                 ?string $issueStatus = null, ?int $done = null,
-                                string $message = '', bool $append = false): void {
+                                string $message = '', bool $append = false): int {
         $issuesApi = $this->redmine->getApi('issue');
         // check main redmine issue
         $issue     = $issuesApi->show($issueId);
@@ -143,5 +143,7 @@ class Redmine {
             $message = self::SUBTASKS[$subtask][(int) $status];
         }
         $issuesApi->addNoteToIssue($issueId, $message);
+        
+        return $issueId;
     }
 }
