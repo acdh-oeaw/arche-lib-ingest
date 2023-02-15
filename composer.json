@@ -17,7 +17,8 @@
         "acdh-oeaw/arche-lib": ">=4 <6",
         "acdh-oeaw/easyrdf": ">=0.13.5",
         "acdh-oeaw/uri-normalizer": "^2",
-        "zozlak/rdf-constants": "^1.2.1"
+        "zozlak/rdf-constants": "^1.2.1",
+        "kbsali/redmine-api": "^2.2"
     },
     "autoload": {
         "psr-4": {
