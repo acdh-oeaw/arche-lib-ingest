@@ -36,7 +36,7 @@ use Redmine\Client\NativeCurlClient;
  */
 class Redmine {
 
-    const SUBTASKS = [
+    const SUBTASKS       = [
         'Virus scan'                                 => [
             "Virus scan failed",
             "Virus scan performed successfully",
@@ -61,6 +61,10 @@ class Redmine {
             "Failed to create PIDs",
             "Successfully created PIDs",
         ],
+    ];
+    const ISSUE_STATUSES = [
+        'New', 'In Progress', 'Resolved', 'Feedback',
+        'Closed', 'Rejected', 'Needs review', 'On Hold'
     ];
 
     private string $apiBase;
