@@ -70,13 +70,13 @@ class Redmine {
     private string $apiBase;
     private NativeCurlClient $redmine;
 
-    public function __construct(string $apiBase, string $pswdOrToken,
-                                string $user = '') {
+    public function __construct(string $apiBase, string $userOrToken,
+                                string $pswd = '') {
         $this->apiBase = $apiBase;
-        if (empty($user)) {
-            $this->redmine = new NativeCurlClient($apiBase, $pswdOrToken);
+        if (empty($pswd)) {
+            $this->redmine = new NativeCurlClient($apiBase, $userOrToken);
         } else {
-            $this->redmine = new NativeCurlClient($apiBase, $pswdOrToken, $user);
+            $this->redmine = new NativeCurlClient($apiBase, $userOrToken, $pswd);
         }
     }
 
