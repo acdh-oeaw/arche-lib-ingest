@@ -34,6 +34,7 @@ use SplFileInfo;
 use EasyRdf\Graph;
 use zozlak\RdfConstants as RDF;
 use GuzzleHttp\Exception\ClientException;
+use GuzzleHttp\Exception\ConnectException;
 use acdhOeaw\UriNormalizer;
 use acdhOeaw\arche\lib\BinaryPayload;
 use acdhOeaw\arche\lib\Repo;
@@ -481,13 +482,14 @@ class Indexer {
      *     objects for successful ingestions and Exception objects for failed ones.
      * @param int $concurrency number of parallel requests to the repository
      *   allowed during the import
-     * @param int $retriesOnConflict how many ingestion attempts should be taken
-     *   if the repository resource is locked by other request
+     * @param int $retries how many ingestion attempts should be taken if the
+     *   repository resource is locked by other request or an network connection 
+     *   error occurs
      * @return array<RepoResource|ClientException> a list RepoResource objects representing indexed resources
      * @throws IndexerException
      */
     public function import(string $errorMode = self::ERRMODE_FAIL,
-                           int $concurrency = 3, int $retriesOnConflict = 3): array {
+                           int $concurrency = 3, int $retries = 6): array {
         if (!isset($this->repo)) {
             throw new IndexerException("Repository connection object isn't set. Call setRepo() or setParent() first or pass the Repo object to the constructor.");
         }
@@ -525,11 +527,14 @@ class Indexer {
                     continue;
                 }
                 // handle reingestion on "HTTP 409 Conflict"
-                if ($j instanceof Conflict && preg_match('/Resource [0-9]+ locked|Transaction [0-9]+ locked|Owned by other request|Lock not available|duplicate key value/', $j->getMessage())) {
-                    if ($chunk[$n]->getUploadsCount() <= $retriesOnConflict + 1) {
-                        $filesToImport[] = $chunk[$n];
-                        continue;
+                $isConflict     = $j instanceof Conflict && preg_match('/Resource [0-9]+ locked|Transaction [0-9]+ locked|Owned by other request|Lock not available|duplicate key value/', $j->getMessage());
+                $isNetworkError = $j instanceof ConnectException;
+                if (($isConflict || $isNetworkError) && $chunk[$n]->getUploadsCount() <= $retries + 1) {
+                    $filesToImport[] = $chunk[$n];
+                    if ($isNetworkError) {
+                        sleep(1);
                     }
+                    continue;
                 }
                 if ($j instanceof Throwable && $errorMode === self::ERRMODE_FAIL) {
                     throw new IndexerException("Error during import", IndexerException::ERROR_DURING_IMPORT, $j, $commitedRepoRes);

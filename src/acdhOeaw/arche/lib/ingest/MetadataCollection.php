@@ -30,6 +30,7 @@ use Throwable;
 use InvalidArgumentException;
 use GuzzleHttp\Promise\RejectedPromise;
 use GuzzleHttp\Exception\ClientException;
+use GuzzleHttp\Exception\ConnectException;
 use EasyRdf\Graph;
 use EasyRdf\Resource;
 use acdhOeaw\arche\lib\Repo;
@@ -215,8 +216,8 @@ class MetadataCollection extends Graph {
      *     Exception objects for failed ones.
      * @param int $concurrency number of parallel requests to the repository
      *   allowed during the import
-     * @param int $retriesOnConflict how many ingestion attempts should be taken
-     *   if the repository resource is locked by other request
+     * @param int $retries how many ingestion attempts should be taken if the 
+     *   repository resource is locked by other request or a network error occurs
      * @return array<RepoResource|ClientException>
      * @throws InvalidArgumentException
      * @throws IndexerException
@@ -224,7 +225,7 @@ class MetadataCollection extends Graph {
      */
     public function import(string $namespace, int $singleOutNmsp,
                            string $errorMode = self::ERRMODE_FAIL,
-                           int $concurrency = 3, int $retriesOnConflict = 3): array {
+                           int $concurrency = 3, int $retries = 6): array {
         $idProp = $this->repo->getSchema()->id;
 
         $dict = [self::SKIP, self::CREATE];
@@ -308,13 +309,17 @@ class MetadataCollection extends Graph {
             $chunkRepoRes = $this->repo->map($chunk, $f, $concurrency, Repo::REJECT_INCLUDE);
             foreach ($chunkRepoRes as $n => $j) {
                 // handle reingestion on "HTTP 409 Conflict"
-                $conflict = $j instanceof Conflict && preg_match('/Resource [0-9]+ locked|Transaction [0-9]+ locked|Owned by other request|Lock not available/', $j->getMessage());
-                $notFound = $j instanceof NotFound;
-                if ($conflict || $notFound) {
+                $conflict     = $j instanceof Conflict && preg_match('/Resource [0-9]+ locked|Transaction [0-9]+ locked|Owned by other request|Lock not available/', $j->getMessage());
+                $notFound     = $j instanceof NotFound;
+                $networkError = $j instanceof ClientException;
+                if ($conflict || $notFound || $networkError) {
                     $metaRes                          = $chunk[$n];
                     $reingestions[$metaRes->getUri()] = ($reingestions[$metaRes->getUri()] ?? 0) + 1;
-                    if ($reingestions[$metaRes->getUri()] <= $retriesOnConflict) {
+                    if ($reingestions[$metaRes->getUri()] <= $retries) {
                         $toBeImported[] = $metaRes;
+                        if ($networkError) {
+                            sleep(1);
+                        }
                         continue;
                     }
                 }
