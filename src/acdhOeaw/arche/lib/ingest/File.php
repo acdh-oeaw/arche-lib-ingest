@@ -129,6 +129,7 @@ class File {
                 throw $error;
             }
             if ($this->skipMode & Indexer::SKIP_NOT_EXIST) {
+                echo ProgressMeter::format($this->meterId, $this->n, "Processing " . $this->info->getPathname() . " ({n}/{t} {p}%): skip\n");
                 return new SkippedException();
             }
             return $this->createAsync();
