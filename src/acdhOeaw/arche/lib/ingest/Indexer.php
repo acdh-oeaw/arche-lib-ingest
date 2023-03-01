@@ -53,23 +53,24 @@ use acdhOeaw\arche\lib\ingest\metaLookup\MetaLookupException;
  */
 class Indexer {
 
-    const FILTER_MATCH      = 1;
-    const FILTER_SKIP       = 2;
-    const SKIP_NONE         = 0;
-    const SKIP_NOT_EXIST    = 1;
-    const SKIP_EXIST        = 2;
-    const SKIP_BINARY_EXIST = 4;
-    const VERSIONING_NONE   = 1;
-    const VERSIONING_ALWAYS = 2;
-    const VERSIONING_DIGEST = 3;
-    const VERSIONING_DATE   = 4;
-    const PID_KEEP          = 1;
-    const PID_PASS          = 2;
-    const ERRMODE_FAIL      = 'fail';
-    const ERRMODE_PASS      = 'pass';
-    const ERRMODE_INCLUDE   = 'include';
-    const ERRMODE_CONTINUE  = 'continue';
-    const ENC_UTF8          = 'utf-8';
+    const FILTER_MATCH       = 1;
+    const FILTER_SKIP        = 2;
+    const SKIP_NONE          = 0;
+    const SKIP_NOT_EXIST     = 1;
+    const SKIP_EXIST         = 2;
+    const SKIP_BINARY_EXIST  = 4;
+    const VERSIONING_NONE    = 1;
+    const VERSIONING_ALWAYS  = 2;
+    const VERSIONING_DIGEST  = 3;
+    const VERSIONING_DATE    = 4;
+    const PID_KEEP           = 1;
+    const PID_PASS           = 2;
+    const ERRMODE_FAIL       = 'fail';
+    const ERRMODE_PASS       = 'pass';
+    const ERRMODE_INCLUDE    = 'include';
+    const ERRMODE_CONTINUE   = 'continue';
+    const ENC_UTF8           = 'utf-8';
+    const NETWORKERROR_SLEEP = 3;
 
     /**
      * Turns debug messages on
@@ -522,6 +523,7 @@ class Indexer {
             $chunk        = array_slice($filesToImport, $i, $chunkSize);
             $chunkSize    = min($chunkSize, count($chunk)); // not to loose repeating reinjections
             $chunkRepoRes = $this->repo->map($chunk, $f, $concurrency, Repo::REJECT_INCLUDE);
+            $sleep        = false;
             foreach ($chunkRepoRes as $n => $j) {
                 if ($j instanceof SkippedException) {
                     continue;
@@ -531,22 +533,24 @@ class Indexer {
                 $isNetworkError = $j instanceof ConnectException;
                 if (($isConflict || $isNetworkError) && $chunk[$n]->getUploadsCount() <= $retries + 1) {
                     $filesToImport[] = $chunk[$n];
-                    if ($isNetworkError) {
-                        sleep(1);
+                    $sleep           = $sleep || $isNetworkError;
+                } else {
+                    // non-retryable errors
+                    if ($j instanceof Throwable && $errorMode === self::ERRMODE_FAIL) {
+                        throw new IndexerException("Error during import", IndexerException::ERROR_DURING_IMPORT, $j, $commitedRepoRes);
+                    } elseif ($j instanceof Throwable) {
+                        $msg    = $j instanceof ClientException ? $j->getResponse()->getBody() : $j->getMessage();
+                        $msg    = $chunk[$n]->getPath() . ": " . $msg;
+                        $errors .= "\t$msg\n";
+                        echo self::$debug ? "\tERROR while processing " . $chunk[$n]->getPath() . ": $msg\n" : '';
                     }
-                    continue;
+                    if ($j instanceof RepoResource || $errorMode === self::ERRMODE_INCLUDE || $errorMode === self::ERRMODE_CONTINUE) {
+                        $allRepoRes[] = $j;
+                    }
                 }
-                if ($j instanceof Throwable && $errorMode === self::ERRMODE_FAIL) {
-                    throw new IndexerException("Error during import", IndexerException::ERROR_DURING_IMPORT, $j, $commitedRepoRes);
-                } elseif ($j instanceof Throwable) {
-                    $msg    = $j instanceof ClientException ? $j->getResponse()->getBody() : $j->getMessage();
-                    $msg    = $chunk[$n]->getPath() . ": " . $msg;
-                    $errors .= "\t$msg\n";
-                    echo self::$debug ? "\tERROR while processing " . $chunk[$n]->getPath() . ": $msg\n" : '';
-                }
-                if ($j instanceof RepoResource || $errorMode === self::ERRMODE_INCLUDE || $errorMode === self::ERRMODE_CONTINUE) {
-                    $allRepoRes[] = $j;
-                }
+            }
+            if ($sleep) {
+                sleep(self::NETWORKERROR_SLEEP);
             }
         }
         if (!empty($errors) && $errorMode === self::ERRMODE_PASS) {

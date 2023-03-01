@@ -46,11 +46,12 @@ use acdhOeaw\UriNormalizer;
  */
 class MetadataCollection extends Graph {
 
-    const SKIP            = 1;
-    const CREATE          = 2;
-    const ERRMODE_FAIL    = 'fail';
-    const ERRMODE_PASS    = 'pass';
-    const ERRMODE_INCLUDE = 'include';
+    const SKIP               = 1;
+    const CREATE             = 2;
+    const ERRMODE_FAIL       = 'fail';
+    const ERRMODE_PASS       = 'pass';
+    const ERRMODE_INCLUDE    = 'include';
+    const NETWORKERROR_SLEEP = 3;
 
     /**
      * Turns debug messages on.
@@ -307,33 +308,36 @@ class MetadataCollection extends Graph {
             $chunk        = array_slice($toBeImported, $i, $chunkSize);
             $chunkSize    = min($chunkSize, count($chunk)); // not to loose repeating reinjections
             $chunkRepoRes = $this->repo->map($chunk, $f, $concurrency, Repo::REJECT_INCLUDE);
+            $sleep        = false;
             foreach ($chunkRepoRes as $n => $j) {
                 // handle reingestion on "HTTP 409 Conflict"
                 $conflict     = $j instanceof Conflict && preg_match('/Resource [0-9]+ locked|Transaction [0-9]+ locked|Owned by other request|Lock not available/', $j->getMessage());
                 $notFound     = $j instanceof NotFound;
-                $networkError = $j instanceof ClientException;
+                $networkError = $j instanceof ConnectException;
                 if ($conflict || $notFound || $networkError) {
                     $metaRes                          = $chunk[$n];
                     $reingestions[$metaRes->getUri()] = ($reingestions[$metaRes->getUri()] ?? 0) + 1;
                     if ($reingestions[$metaRes->getUri()] <= $retries) {
                         $toBeImported[] = $metaRes;
-                        if ($networkError) {
-                            sleep(1);
-                        }
-                        continue;
+                        $sleep          = $sleep || $networkError;
+                    }
+                } else {
+                    // non-retryable errors
+                    if ($j instanceof Throwable && $errorMode === self::ERRMODE_FAIL) {
+                        throw new IndexerException("Error during import", IndexerException::ERROR_DURING_IMPORT, $j, $commitedRepoRes);
+                    } elseif ($j instanceof Throwable) {
+                        $msg    = $j instanceof ClientException ? $j->getResponse()->getStatusCode() . ' ' . $j->getResponse()->getBody() : $j->getMessage();
+                        $msg    = $chunk[$n]->getUri() . ": " . $msg . "(" . get_class($j) . ")";
+                        $errors .= "\t$msg\n";
+                        echo self::$debug ? "\tERROR while processing $msg\n" : '';
+                    }
+                    if ($j instanceof RepoResource || $errorMode === self::ERRMODE_INCLUDE) {
+                        $allRepoRes[] = $j;
                     }
                 }
-                if ($j instanceof Throwable && $errorMode === self::ERRMODE_FAIL) {
-                    throw new IndexerException("Error during import", IndexerException::ERROR_DURING_IMPORT, $j, $commitedRepoRes);
-                } elseif ($j instanceof Throwable) {
-                    $msg    = $j instanceof ClientException ? $j->getResponse()->getStatusCode() . ' ' . $j->getResponse()->getBody() : $j->getMessage();
-                    $msg    = $chunk[$n]->getUri() . ": " . $msg . "(" . get_class($j) . ")";
-                    $errors .= "\t$msg\n";
-                    echo self::$debug ? "\tERROR while processing $msg\n" : '';
-                }
-                if ($j instanceof RepoResource || $errorMode === self::ERRMODE_INCLUDE) {
-                    $allRepoRes[] = $j;
-                }
+            }
+            if ($sleep) {
+                sleep(self::NETWORKERROR_SLEEP);
             }
         }
         if (!empty($errors) && $errorMode === self::ERRMODE_PASS) {
