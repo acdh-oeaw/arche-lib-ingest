@@ -72,6 +72,9 @@ class FileId {
     private int $defaultDirLen;
 
     public function __construct(string $idPrefix, string $defaultDir = '') {
+        if (!empty($idPrefix) && substr($idPrefix, -1) !== '/') {
+            $idPrefix .= '/';
+        }
         $this->idPrefix      = $idPrefix;
         $this->defaultDirLen = strlen($defaultDir);
     }
