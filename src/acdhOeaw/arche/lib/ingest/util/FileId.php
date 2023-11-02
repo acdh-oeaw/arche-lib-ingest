@@ -76,7 +76,7 @@ class FileId {
             $idPrefix .= '/';
         }
         $this->idPrefix      = $idPrefix;
-        $this->defaultDirLen = strlen($defaultDir);
+        $this->defaultDirLen = $this->getDirLen($defaultDir);
     }
 
     public function getId(SplFileInfo | string $path,
@@ -84,11 +84,19 @@ class FileId {
         if ($path instanceof SplFileInfo) {
             $path = $path->getPathname();
         }
-        $dirLen = $directory === null ? $this->defaultDirLen : strlen(self::pathToUtf8($directory));
+        $dirLen = $directory === null ? $this->defaultDirLen : $this->getDirLen($directory);
         $id     = self::pathToUtf8($path);
         $id     = str_replace('\\', '/', $id);
         $id     = substr($path, $dirLen);
         $id     = str_replace('%2F', '/', rawurlencode($id));
         return $this->idPrefix . $id;
+    }
+
+    private function getDirLen(string $dir): int {
+        $dir = self::pathToUtf8($dir);
+        if (!empty($dir) && substr($dir, -1) !== '/') {
+            $dir .= '/';
+        }
+        return strlen($dir);
     }
 }
