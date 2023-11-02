@@ -14,11 +14,13 @@
         "php": ">=8 <8.2",
         "ext-iconv": "*",
         "guzzlehttp/guzzle": "^7",
-        "acdh-oeaw/arche-lib": ">=4 <6",
-        "acdh-oeaw/easyrdf": ">=0.13.5",
-        "acdh-oeaw/uri-normalizer": "^2",
+        "acdh-oeaw/arche-lib": "dev-rdfInterface",
+        "acdh-oeaw/uri-normalizer": "dev-master",
         "zozlak/rdf-constants": "^1.2.1",
-        "kbsali/redmine-api": "^2.2"
+        "kbsali/redmine-api": "^2.2",
+        "sweetrdf/rdf-interface": "^2.0.0-RC1",
+        "sweetrdf/quick-rdf": "dev-master",
+        "sweetrdf/quick-rdf-io": "dev-master"
     },
     "autoload": {
         "psr-4": {
