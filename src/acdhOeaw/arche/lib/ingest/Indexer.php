@@ -41,6 +41,7 @@ use acdhOeaw\arche\lib\Repo;
 use acdhOeaw\arche\lib\RepoResource;
 use acdhOeaw\arche\lib\Schema;
 use acdhOeaw\arche\lib\exception\Conflict;
+use acdhOeaw\arche\lib\ingest\util\FileId;
 use acdhOeaw\arche\lib\ingest\util\ProgressMeter;
 use acdhOeaw\arche\lib\ingest\metaLookup\MetaLookupConstant;
 use acdhOeaw\arche\lib\ingest\metaLookup\MetaLookupInterface;
@@ -69,43 +70,13 @@ class Indexer {
     const ERRMODE_PASS       = 'pass';
     const ERRMODE_INCLUDE    = 'include';
     const ERRMODE_CONTINUE   = 'continue';
-    const ENC_UTF8           = 'utf-8';
     const NETWORKERROR_SLEEP = 3;
 
     /**
      * Turns debug messages on
      */
     static public bool $debug = false;
-
-    /**
-     * Detected operating system path enconding.
-     */
-    static private string $pathEncoding = '';
-
-    /**
-     * Tries to detect path encoding used in the operating system.
-     * @throws RuntimeException
-     */
-    static private function pathToUtf8(string $path): string {
-        if (empty(self::$pathEncoding)) {
-            $ctype = setlocale(LC_CTYPE, '');
-            if (!empty($ctype)) {
-                $ctype = (string) preg_replace('|^.*[.]|', '', $ctype);
-                if (is_numeric($ctype)) {
-                    self::$pathEncoding = 'windows-' . $ctype;
-                } else if (preg_match('|utf-?8|i', $ctype) || PHP_OS === 'Linux') {
-                    self::$pathEncoding = 'utf-8';
-                } else {
-                    throw new RuntimeException('Operation system encoding can not be determined');
-                }
-            }
-            // if there's nothing in LC_ALL, optimistically assume utf-8
-            if (empty(self::$pathEncoding)) {
-                self::$pathEncoding = self::ENC_UTF8;
-            }
-        }
-        return self::$pathEncoding === self::ENC_UTF8 ? $path : (string) iconv(self::$pathEncoding, 'utf-8', $path);
-    }
+    private FileId $idgen;
 
     /**
      * RepoResource which children are created by the Indexer
@@ -165,12 +136,6 @@ class Indexer {
      * to form a binary id.
      */
     private string $directory;
-
-    /**
-     * Length in bytes of the sanitized version of the $directory property
-     * @var int
-     */
-    private int $directoryLength;
 
     /**
      * Namespaces to substitute the $directory in the ingested binary path
@@ -267,7 +232,6 @@ class Indexer {
         $this->schema          = $this->repo->getSchema();
         $this->binaryClass     = $this->schema->ingest->defaultBinaryClass;
         $this->collectionClass = $this->schema->ingest->defaultCollectionClass;
-        $this->directoryLength = strlen(self::pathToUtf8($this->directory));
         $this->uriNorm         = new UriNormalizer(null, $this->schema->id);
         $this->metaLookup      = new MetaLookupConstant((new Graph())->resource('.'));
     }
@@ -499,6 +463,7 @@ class Indexer {
         if ($this->flatStructure && substr($this->idPrefix, -1) !== '/') {
             $this->idPrefix .= '/';
         }
+        $this->idgen = new FileId($this->idPrefix, $this->flatStructure ? '' : $this->directory);
 
         // gather files from the filesystem
         $filesToImport = $this->listFiles(new SplFileInfo($this->directory), 0);
@@ -604,15 +569,10 @@ class Indexer {
         $dir    = $file->getPath();
         $schema = $this->repo->getSchema();
 
-        if ($this->flatStructure) {
-            $id = $this->idPrefix . rawurlencode(self::pathToUtf8($file->getFilename()));
-        } else {
-            $id = self::pathToUtf8($path);
-            $id = str_replace('\\', '/', $id);
-            $id = substr($path, $this->directoryLength);
-            $id = str_replace('%2F', '/', rawurlencode($id));
-            $id = $this->idPrefix . $id;
-        }
+        $id = match ($this->flatStructure) {
+            true => $this->idgen->getId($file->getFilename(), ''),
+            false => $this->idgen->getId($path)
+        };
 
         $extMeta = $this->metaLookup->getMetadata($path, [$id], $this->metaLookupRequire);
         // id
