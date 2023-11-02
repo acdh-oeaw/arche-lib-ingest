@@ -89,7 +89,11 @@ class FileId {
         $id     = str_replace('\\', '/', $id);
         $id     = substr($path, $dirLen);
         $id     = str_replace('%2F', '/', rawurlencode($id));
-        return $this->idPrefix . $id;
+        $id     = $this->idPrefix . $id;
+        if (substr($id, -1) === '/') {
+            $id = substr($id, 0, -1);
+        }
+        return $id;
     }
 
     private function getDirLen(string $dir): int {
