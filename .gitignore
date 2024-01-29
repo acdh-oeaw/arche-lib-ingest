@@ -5,6 +5,7 @@
 /tests/time.log
 /.phpdoc
 /.phpunit.result.cache
+/.phpunit.cache
 /config
 /log
 /tests/data/schnitzler-data

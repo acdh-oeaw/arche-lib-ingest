@@ -26,9 +26,13 @@
 
 namespace acdhOeaw\arche\lib\ingest\tests;
 
-use EasyRdf\Graph;
-use EasyRdf\Literal;
 use zozlak\RdfConstants as RDF;
+use quickRdf\DataFactory as DF;
+use quickRdf\Dataset;
+use quickRdf\DatasetNode;
+use termTemplates\PredicateTemplate as PT;
+use termTemplates\LiteralTemplate;
+use quickRdfIo\Util as RdfIoUtil;
 use GuzzleHttp\Psr7\Request;
 use GuzzleHttp\Exception\ClientException;
 use acdhOeaw\arche\lib\RepoResource;
@@ -54,19 +58,21 @@ class IndexerTest extends TestBase {
     static public function setUpBeforeClass(): void {
         parent::setUpBeforeClass();
 
-//        MetaLookupFile::$debug  = true;
-//        MetaLookupGraph::$debug = true;
-//        Indexer::$debug         = true;
+//        MetaLookupFile::$debug  = 2;
+//        MetaLookupGraph::$debug = 2;
+//        Indexer::$debug         = 2;
 
         self::$repo->begin();
-        $id = 'http://my.test/id';
+        $id = DF::namedNode('http://my.test/id');
         try {
             self::$res = self::$repo->getResourceById($id);
         } catch (NotFound $ex) {
-            $meta      = (new Graph())->resource('.');
-            $meta->addLiteral(self::$config->schema->label, 'test parent');
-            $meta->addLiteral(self::$config->schema->fileName, 'data');
-            $meta->addResource(self::$config->schema->id, $id);
+            $meta      = new DatasetNode($id);
+            $meta->add([
+                DF::quadNoSubject(self::$schema->label, DF::literal('test parent')),
+                DF::quadNoSubject(self::$schema->fileName, DF::literal('data')),
+                DF::quadNoSubject(self::$schema->id, $id),
+            ]);
             self::$res = self::$repo->createResource($meta);
         }
         self::$repo->commit();
@@ -118,18 +124,18 @@ class IndexerTest extends TestBase {
         $indRes = $this->ind->import(Indexer::ERRMODE_FAIL);
         $this->noteResources($indRes);
         foreach ($indRes as $i) {
-            $file = (string) $i->getGraph()->getLiteral(self::$config->schema->fileName);
+            $file = (string) $i->getGraph()->getObject(new PT(self::$schema->fileName));
             if (is_file(__DIR__ . "/data/$file")) {
-                $resp = self::$repo->sendRequest(new Request('get', $i->getUri()));
+                $resp = self::$repo->sendRequest(new Request('get', (string) $i->getUri()));
                 $this->assertEquals(file_get_contents(__DIR__ . "/data/$file"), (string) $resp->getBody());
             }
         }
-        
+
         self::$repo->commit();
         foreach ($indRes as $i) {
-            $file = (string) $i->getGraph()->getLiteral(self::$config->schema->fileName);
+            $file = (string) $i->getGraph()->getObject(new PT(self::$schema->fileName));
             if (is_file(__DIR__ . "/data/$file")) {
-                $resp = self::$repo->sendRequest(new Request('get', $i->getUri()));
+                $resp = self::$repo->sendRequest(new Request('get', (string) $i->getUri()));
                 $this->assertEquals(file_get_contents(__DIR__ . "/data/$file"), (string) $resp->getBody());
             }
         }
@@ -225,7 +231,8 @@ class IndexerTest extends TestBase {
 
         $this->assertEquals(1, count($indRes));
         $meta = array_pop($indRes)->getMetadata();
-        $this->assertEquals('sample value', (string) $meta->getLiteral('https://some.sample/property'));
+        $tmpl = new PT('https://some.sample/property', new LiteralTemplate(null, LiteralTemplate::ANY));
+        $this->assertEquals('sample value', (string) $meta->getObject($tmpl));
     }
 
     /**
@@ -234,8 +241,8 @@ class IndexerTest extends TestBase {
     public function testMetaFromGraph(): void {
         self::$test = 'testMetaFromGraph';
 
-        $graph      = new Graph();
-        $graph->parseFile(__DIR__ . '/data/sample.xml.ttl');
+        $graph      = new Dataset();
+        $graph->add(RdfIoUtil::parse(__DIR__ . '/data/sample.xml.ttl', new DF()));
         $metaLookup = new MetaLookupGraph($graph, self::$repo->getSchema()->id);
         $this->ind->setDepth(0);
         $this->ind->setMetaLookup($metaLookup);
@@ -247,7 +254,8 @@ class IndexerTest extends TestBase {
 
         $this->assertEquals(1, count($indRes));
         $meta = array_pop($indRes)->getMetadata();
-        $this->assertEquals('sample value', (string) $meta->getLiteral('https://some.sample/property'));
+        $tmpl = new PT('https://some.sample/property', new LiteralTemplate(null, LiteralTemplate::ANY));
+        $this->assertEquals('sample value', (string) $meta->getObject($tmpl));
     }
 
     /**
@@ -266,7 +274,8 @@ class IndexerTest extends TestBase {
 
         $this->assertEquals(1, count($indRes));
         $meta = array_pop($indRes)->getMetadata();
-        $this->assertEquals('sample value', (string) $meta->getLiteral('https://some.sample/property'));
+        $tmpl = new PT('https://some.sample/property', new LiteralTemplate(null, LiteralTemplate::ANY));
+        $this->assertEquals('sample value', (string) $meta->getObject($tmpl));
     }
 
     /**
@@ -285,7 +294,8 @@ class IndexerTest extends TestBase {
 
         $this->assertEquals(1, count($indRes));
         $meta = array_pop($indRes)->getMetadata();
-        $this->assertEquals('sample value', (string) $meta->getLiteral('https://some.sample/property'));
+        $tmpl = new PT('https://some.sample/property', new LiteralTemplate(null, LiteralTemplate::ANY));
+        $this->assertEquals('sample value', (string) $meta->getObject($tmpl));
     }
 
     /**
@@ -296,20 +306,22 @@ class IndexerTest extends TestBase {
 
         $idProp    = self::$repo->getSchema()->id;
         $titleProp = self::$repo->getSchema()->label;
-        $commonId  = 'https://my.id.nmsp/' . rand();
+        $commonId  = DF::namedNode('https://my.id.nmsp/' . rand());
         $fileName  = rand();
 
         self::$repo->begin();
 
-        $meta = (new Graph())->resource('.');
-        $meta->addResource($idProp, $commonId);
-        $meta->addLiteral($titleProp, 'sample title');
+        $meta = new DatasetNode($commonId);
+        $meta->add([
+            DF::quadNoSubject($idProp, $commonId),
+            DF::quadNoSubject($titleProp, DF::literal('sample title')),
+        ]);
         $res1 = self::$repo->createResource($meta);
         $this->noteResources([$res1]);
 
-        $meta->delete($titleProp);
+        $meta->delete(new PT($titleProp));
         mkdir($this->tmpDir);
-        file_put_contents($this->tmpDir . $fileName . '.ttl', $meta->getGraph()->serialise('turtle'));
+        RdfIoUtil::serialize($meta, 'text/turtle', $this->tmpDir . $fileName . '.ttl');
         file_put_contents($this->tmpDir . $fileName, 'sample content');
         $ind    = new Indexer($this->tmpDir, self::URI_PREFIX, self::$repo);
         $ind->setFilter('/^' . $fileName . '$/');
@@ -330,14 +342,16 @@ class IndexerTest extends TestBase {
 
         $idProp    = self::$repo->getSchema()->id;
         $titleProp = self::$repo->getSchema()->label;
-        $commonId  = 'https://my.id.nmsp/' . rand();
+        $commonId  = DF::namedNode('https://my.id.nmsp/' . rand());
         $fileName  = rand();
 
         //first instance of a resource created in a separate transaction
         self::$repo->begin();
-        $meta = (new Graph())->resource('.');
-        $meta->addResource($idProp, $commonId);
-        $meta->addLiteral($titleProp, 'sample title');
+        $meta = new DatasetNode($commonId);
+        $meta->add([
+            DF::quadNoSubject($idProp, $commonId),
+            DF::quadNoSubject($titleProp, DF::literal('sample title')),
+        ]);
         $res2 = self::$repo->createResource($meta);
         $this->noteResources([$res2]);
         self::$repo->commit();
@@ -352,9 +366,9 @@ class IndexerTest extends TestBase {
         $this->noteResources([$res4]);
 
         // preparare files on a disk
-        $meta->delete($titleProp);
+        $meta->delete(new PT($titleProp));
         mkdir($this->tmpDir);
-        file_put_contents($this->tmpDir . $fileName . '.ttl', $meta->getGraph()->serialise('turtle'));
+        RdfIoUtil::serialize($meta, 'text/turtle', $this->tmpDir . $fileName . '.ttl');
         file_put_contents($this->tmpDir . $fileName, 'sample content');
         // index
         $ind    = new Indexer($this->tmpDir, self::URI_PREFIX, self::$repo);
@@ -375,8 +389,9 @@ class IndexerTest extends TestBase {
     public function testConflict1(): void {
         self::$test = 'testConflict1';
 
-        $meta = (new Graph())->resource('.');
-        $meta->addResource(self::$config->schema->id, 'http://foo/' . rand());
+        $id   = DF::namedNode('http://foo/' . rand());
+        $meta = new DatasetNode($id);
+        $meta->add(DF::quadNoSubject(self::$schema->id, $id));
 
         $this->ind->setFilter('/txt|xml/', Indexer::FILTER_MATCH);
         $this->ind->setFlatStructure(true);
@@ -396,8 +411,9 @@ class IndexerTest extends TestBase {
     public function testConflict2(): void {
         self::$test = 'testConflict2';
 
-        $meta = (new Graph())->resource('.');
-        $meta->addResource(self::$config->schema->id, 'http://foo/' . rand());
+        $id   = DF::namedNode('http://foo/' . rand());
+        $meta = new DatasetNode($id);
+        $meta->add(DF::quadNoSubject(self::$schema->id, $id));
 
         $this->ind->setFilter('/txt|xml/', Indexer::FILTER_MATCH);
         $this->ind->setFlatStructure(true);
@@ -434,8 +450,10 @@ class IndexerTest extends TestBase {
     public function testNewVersionCreation(): void {
         self::$test = 'testNewVersionCreation';
 
-        $pidProp = self::$repo->getSchema()->ingest->pid;
-        $pid     = 'https://sample.pid/' . rand();
+        $schema  = self::$repo->getSchema();
+        $pidProp = $schema->ingest->pid;
+        $pidTmpl = new PT($pidProp);
+        $pid     = DF::namedNode('https://sample.pid/' . rand());
 
         $indRes1 = $indRes2 = $indRes3 = [];
         $this->ind->setFilter('/^sample.xml$/', Indexer::FILTER_MATCH);
@@ -446,7 +464,7 @@ class IndexerTest extends TestBase {
         $this->noteResources($indRes1);
         $initRes = array_pop($indRes1);
         $meta    = $initRes->getMetadata();
-        $meta->addResource($pidProp, $pid);
+        $meta->add(DF::quadNoSubject($pidProp, $pid));
         $initRes->setMetadata($meta);
         $initRes->updateMetadata();
         self::$repo->commit();
@@ -462,13 +480,13 @@ class IndexerTest extends TestBase {
         $this->assertEquals(1, count($indRes2));
         $newRes    = array_pop($indRes2);
         $meta      = $newRes->getMetadata();
-        $this->assertEquals($pid, (string) $meta->getResource($pidProp)); // PID copied to the new resource - depends on the repo recognizing pid property as a non-relation one
+        $this->assertEquals($pid, (string) $meta->getObject($pidTmpl)); // PID copied to the new resource - depends on the repo recognizing pid property as a non-relation one
         $this->assertTrue(in_array($pid, $newRes->getIds())); // depends on PID being copied to id (which is NOT the default repository setup cause the repository doesn't know the PID concept)
-        $prevResId = (string) $meta->getResource(self::$repo->getSchema()->isNewVersionOf);
+        $prevResId = (string) $meta->getObject(new PT($schema->isNewVersionOf));
         $this->assertTrue(!empty($prevResId));
         $prevRes   = self::$repo->getResourceById($prevResId);
         $prevMeta  = $prevRes->getMetadata();
-        $this->assertNull($prevMeta->getResource($pidProp)); // PID not present in the old resource
+        $this->assertNull($prevMeta->getObject($pidTmpl)); // PID not present in the old resource
 
         file_put_contents(__DIR__ . '/data/sample.xml', random_int(0, 123456));
 
@@ -481,9 +499,9 @@ class IndexerTest extends TestBase {
         $this->assertEquals(1, count($indRes3));
         $newestRes  = array_pop($indRes3);
         $newestMeta = $newestRes->getMetadata();
-        $this->assertNull($newestMeta->getResource($pidProp));
+        $this->assertNull($newestMeta->getObject($pidTmpl));
         $newMeta    = $newRes->getMetadata();
-        $this->assertEquals($pid, (string) $newMeta->getResource($pidProp));
+        $this->assertEquals($pid, (string) $newMeta->getObject($pidTmpl));
         $this->assertTrue(in_array($pid, $newRes->getIds()));
     }
 
@@ -492,11 +510,11 @@ class IndexerTest extends TestBase {
      */
     public function testErrMode(): void {
         self::$test = 'testFailure';
-        $prop       = self::$config->schema->label;
+        $prop       = self::$schema->label;
         self::$repo->begin();
 
-        $meta = (new Graph())->resource('.');
-        $meta->addLiteral($prop, new Literal('foo', null, RDF::XSD_DATE));
+        $meta = new DatasetNode(DF::namedNode('.'));
+        $meta->add(DF::quadNoSubject($prop, DF::literal('foo', null, RDF::XSD_DATE)));
         $this->ind->setMetaLookup(new MetaLookupConstant($meta));
         $this->ind->setDepth(0);
         $this->ind->setAutoCommit(2);
@@ -575,6 +593,7 @@ class IndexerTest extends TestBase {
         self::$repo->commit();
 
         $this->assertEquals(1, count($indRes));
-        $this->assertEquals($count * $bufLen, (int) array_pop($indRes)->getMetadata()->getLiteral(self::$repo->getSchema()->binarySize)->getValue());
+        $binSize = array_pop($indRes)->getMetadata()->getObject(new PT(self::$repo->getSchema()->binarySize));
+        $this->assertEquals($count * $bufLen, (int) $binSize->getValue());
     }
 }

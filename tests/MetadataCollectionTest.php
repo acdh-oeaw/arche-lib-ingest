@@ -26,11 +26,12 @@
 
 namespace acdhOeaw\arche\lib\ingest\tests;
 
-use EasyRdf\Graph;
 use GuzzleHttp\Exception\ClientException;
+use quickRdf\DataFactory as DF;
+use quickRdf\DatasetNode;
+use termTemplates\PredicateTemplate as PT;
 use acdhOeaw\arche\lib\RepoResource;
 use acdhOeaw\arche\lib\exception\NotFound;
-use acdhOeaw\arche\lib\exception\Conflict;
 use acdhOeaw\arche\lib\ingest\IndexerException;
 use acdhOeaw\arche\lib\ingest\MetadataCollection;
 
@@ -44,7 +45,7 @@ class MetadataCollectionTest extends TestBase {
     static public function setUpBeforeClass(): void {
         parent::setUpBeforeClass();
 
-        //MetadataCollection::$debug = true;
+        //MetadataCollection::$debug = 2;
     }
 
     /**
@@ -169,8 +170,10 @@ class MetadataCollectionTest extends TestBase {
         $this->assertEquals(14, count($indRes));
         $acdh     = self::$repo->getResourceById('http://viaf.org/viaf/6515148451584915970000');
         $acdhMeta = $acdh->getMetadata();
-        $this->assertEquals(1010, (int) $acdhMeta->getLiteral('https://vocabs.acdh.oeaw.ac.at/schema#hasPostcode')->getValue());
-        $this->assertEquals('Austrian Centre for Digital Humanities and Cultural Heritage', (string) $acdhMeta->getLiteral('https://vocabs.acdh.oeaw.ac.at/schema#hasTitle'));
+        $tmpl = new PT(DF::namedNode('https://vocabs.acdh.oeaw.ac.at/schema#hasPostcode'));
+        $this->assertEquals(1010, (int) $acdhMeta->getObject($tmpl)->getValue());
+        $tmpl = new PT(DF::namedNode('https://vocabs.acdh.oeaw.ac.at/schema#hasTitle'));
+        $this->assertEquals('Austrian Centre for Digital Humanities and Cultural Heritage', (string) $acdhMeta->getObject($tmpl));
 
         // repeat to make sure there are no issues with resource duplication, etc.
         $graph  = new MetadataCollection(self::$repo, __DIR__ . '/data/basicResources.ttl');
@@ -192,9 +195,9 @@ class MetadataCollectionTest extends TestBase {
     public function testConflictOnLocked1(): void {
         self::$test = 'testConflictOnLocked1';
 
-        $resId   = 'http://foo/rs1';
-        $resMeta = (new Graph())->resource($resId);
-        $resMeta->addResource(self::$config->schema->id, $resId);
+        $resId   = DF::namedNode('http://foo/rs1');
+        $resMeta = new DatasetNode($resId);
+        $resMeta->add(DF::quadNoSubject(self::$schema->id, $resId));
 
         $graph   = new MetadataCollection(self::$repo, __DIR__ . '/data/conflict1.ttl');
         self::$repo->begin();
@@ -216,11 +219,11 @@ class MetadataCollectionTest extends TestBase {
         $indRes = $graph->import('http://foo/', MetadataCollection::SKIP, MetadataCollection::ERRMODE_FAIL, 17, 34);
         $this->noteResources($indRes);
         self::$repo->rollback();
-        
+
         // there should be no autocommit
-        foreach ($graph->resources() as $res) {
+        foreach ($graph->listSubjects() as $res) {
             try {
-                self::$repo->getResourceById($res->getUri());
+                self::$repo->getResourceById((string) $res);
                 $this->assertTrue(false, "Autocommit happened");
             } catch (NotFound) {
                 $this->assertTrue(true);

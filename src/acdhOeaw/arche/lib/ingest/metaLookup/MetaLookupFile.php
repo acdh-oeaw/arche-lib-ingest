@@ -27,8 +27,12 @@
 namespace acdhOeaw\arche\lib\ingest\metaLookup;
 
 use InvalidArgumentException;
-use EasyRdf\Resource;
-use EasyRdf\Graph;
+use rdfInterface\DatasetNodeInterface;
+use rdfInterface\NamedNodeInterface;
+use quickRdf\DataFactory as DF;
+use quickRdf\Dataset;
+use quickRdf\DatasetNode;
+use quickRdfIo\Util as RdfUtil;
 
 /**
  * Implements metadata lookup by searching in a given metadata locations for
@@ -52,13 +56,11 @@ class MetaLookupFile implements MetaLookupInterface {
 
     /**
      * Suffix added to a file name to form a metadata file name.
-     * @var string
      */
     private string $extension;
 
     /**
      * Metadata file format
-     * @var ?string
      */
     private ?string $format;
 
@@ -82,23 +84,22 @@ class MetaLookupFile implements MetaLookupInterface {
     /**
      * Searches for metadata of a given file.
      * @param string $path path to the file
-     * @param array<string> $identifiers file's identifiers (URIs) - just for 
+     * @param array<string|NamedNodeInterface> $identifiers file's identifiers (URIs) - just for 
      *   conformance with the interface, they are not used
      * @param bool $require should error be thrown when no metadata was found
      *   (when false a resource with no triples is returned)
-     * @return \EasyRdf\Resource fetched metadata
+     * @return DatasetNodeInterface fetched metadata
      * @throws \InvalidArgumentException
      * @throws MetaLookupException
      */
     public function getMetadata(string $path, array $identifiers,
-                                bool $require = false): Resource {
+                                bool $require = false): DatasetNodeInterface {
         if (!file_exists($path)) {
             throw new InvalidArgumentException('no such file');
         }
         $dir  = dirname($path);
         $name = basename($path) . $this->extension;
 
-        $graph = new Graph();
         foreach ($this->locations as $loc) {
             if (substr($loc, 0, 1) !== '/') {
                 $loc = $dir . '/' . $loc;
@@ -109,16 +110,12 @@ class MetaLookupFile implements MetaLookupInterface {
             if (file_exists($loc)) {
                 echo self::$debug ? "    found\n" : '';
 
-                $graph->parseFile($loc, $this->format);
-                $candidates = [];
-                foreach ($graph->resources() as $res) {
-                    if (count($res->propertyUris()) > 0) {
-                        $candidates[] = $res;
-                    }
-                }
+                $graph      = new Dataset();
+                $graph->add(RdfUtil::parse($loc, new DF(), $this->format));
+                $candidates = iterator_to_array($graph->listSubjects());
 
                 if (count($candidates) == 1) {
-                    return $candidates[0];
+                    return (new DatasetNode(current($candidates)))->withDataset($graph);
                 } else if (count($candidates) > 1) {
                     throw new MetaLookupException('more then one metadata resource');
                 } else {
@@ -132,7 +129,7 @@ class MetaLookupFile implements MetaLookupInterface {
         if ($require) {
             throw new MetaLookupException('External metadata not found', 11);
         } else {
-            return $graph->resource('.');
+            return new DatasetNode(current($identifiers));
         }
     }
 }

@@ -31,10 +31,12 @@ use BadMethodCallException;
 use Throwable;
 use DirectoryIterator;
 use SplFileInfo;
-use EasyRdf\Graph;
 use zozlak\RdfConstants as RDF;
 use GuzzleHttp\Exception\ClientException;
 use GuzzleHttp\Exception\ConnectException;
+use rdfInterface\NamedNodeInterface;
+use quickRdf\DatasetNode;
+use quickRdf\DataFactory as DF;
 use acdhOeaw\UriNormalizer;
 use acdhOeaw\arche\lib\BinaryPayload;
 use acdhOeaw\arche\lib\Repo;
@@ -114,12 +116,12 @@ class Indexer {
     /**
      * URI of an RDF class assigned to indexed collections.
      */
-    private ?string $collectionClass = null;
+    private NamedNodeInterface $collectionClass;
 
     /**
      * URI of an RDF class assigned to indexed binary resources.
      */
-    private ?string $binaryClass = null;
+    private NamedNodeInterface $binaryClass;
 
     /**
      * How many subsequent subdirectories should be indexed.
@@ -230,10 +232,10 @@ class Indexer {
         }
 
         $this->schema          = $this->repo->getSchema();
-        $this->binaryClass     = $this->schema->ingest->defaultBinaryClass;
-        $this->collectionClass = $this->schema->ingest->defaultCollectionClass;
+        $this->binaryClass     = DF::namedNode($this->schema->ingest->defaultBinaryClass);
+        $this->collectionClass = DF::namedNode($this->schema->ingest->defaultCollectionClass);
         $this->uriNorm         = new UriNormalizer(null, $this->schema->id);
-        $this->metaLookup      = new MetaLookupConstant((new Graph())->resource('.'));
+        $this->metaLookup      = new MetaLookupConstant(new DatasetNode(DF::namedNode('.')));
     }
 
     /**
@@ -312,11 +314,10 @@ class Indexer {
      * 
      * Overrides setting read form the `cfg::defaultCollectionClass` 
      * configuration property.
-     * @param string $class
      * @return Indexer
      */
-    public function setCollectionClass(string $class): Indexer {
-        $this->collectionClass = $class;
+    public function setCollectionClass(string | NamedNodeInterface $class): Indexer {
+        $this->collectionClass = DF::namedNode($class);
         return $this;
     }
 
@@ -325,11 +326,10 @@ class Indexer {
      * 
      * Overrides setting read form the `cfg::defaultBinaryClass` 
      * configuration property.
-     * @param string $class
      * @return Indexer
      */
-    public function setBinaryClass(string $class): Indexer {
-        $this->binaryClass = $class;
+    public function setBinaryClass(string | NamedNodeInterface $class): Indexer {
+        $this->binaryClass = DF::namedNode($class);
         return $this;
     }
 
@@ -575,32 +575,34 @@ class Indexer {
         };
 
         $extMeta = $this->metaLookup->getMetadata($path, [$id], $this->metaLookupRequire);
-        // id
-        $extMeta->addResource($schema->id, $id);
-        // filename
-        $extMeta->addLiteral($schema->fileName, $file->getFilename());
+
+        $toAdd = [
+            DF::quadNoSubject($schema->id, DF::namedNode($id)), // id
+            DF::quadNoSubject($schema->fileName, DF::literal($file->getFilename())), // filename
+        ];
         // class
-        if ($file->isDir() && !empty($this->collectionClass)) {
-            $extMeta->addResource(RDF::RDF_TYPE, $this->collectionClass);
-        } else if ($file->isFile() && !empty($this->binaryClass)) {
-            $extMeta->addResource(RDF::RDF_TYPE, $this->binaryClass);
+        if ($file->isDir() && !empty((string) $this->collectionClass)) {
+            $toAdd[] = DF::quadNoSubject(DF::namedNode(RDF::RDF_TYPE), $this->collectionClass);
+        } else if ($file->isFile() && !empty((string) $this->binaryClass)) {
+            $toAdd[] = DF::quadNoSubject(DF::namedNode(RDF::RDF_TYPE), $this->binaryClass);
         }
         // parent
         if (isset($this->parent) && ($this->flatStructure || $dir === $this->directory)) {
-            $extMeta->addResource($schema->parent, $this->parent->getUri());
+            $toAdd[] = DF::quadNoSubject($schema->parent, $this->parent->getUri());
         }
         if ($dir !== $this->directory && !$this->flatStructure) {
-            $extMeta->addResource($schema->parent, substr($id, 0, strrpos($id, '/') ?: null));
+            $toAdd[] = DF::quadNoSubject($schema->parent, DF::literal(substr($id, 0, strrpos($id, '/') ?: null)));
         }
         // mime type and binary size
         if ($file->isFile()) {
-            $extMeta->addLiteral($schema->binarySize, $file->getSize());
-            $mime = BinaryPayload::guzzleMimetype($path);
-            $mime ??= mime_content_type($path);
+            $toAdd[] = DF::quadNoSubject($schema->binarySize, DF::literal($file->getSize(), null, RDF::XSD_NON_NEGATIVE_INTEGER));
+            $mime    = BinaryPayload::guzzleMimetype($path);
+            $mime    ??= mime_content_type($path);
             if (!empty($mime)) {
-                $extMeta->addLiteral($schema->mime, $mime);
+                $toAdd[] = DF::quadNoSubject($schema->mime, DF::literal($mime));
             }
         }
+        $extMeta->add($toAdd);
         // normalize ids
         $this->uriNorm->normalizeMeta($extMeta, '', false);
 

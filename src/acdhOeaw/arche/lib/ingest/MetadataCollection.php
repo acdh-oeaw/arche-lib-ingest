@@ -27,14 +27,25 @@
 namespace acdhOeaw\arche\lib\ingest;
 
 use Throwable;
+use SplObjectStorage;
 use InvalidArgumentException;
 use GuzzleHttp\Promise\RejectedPromise;
 use GuzzleHttp\Exception\ClientException;
 use GuzzleHttp\Exception\ConnectException;
-use EasyRdf\Graph;
-use EasyRdf\Resource;
+use rdfInterface\BlankNodeInterface;
+use rdfInterface\TermInterface;
+use rdfInterface\QuadInterface;
+use quickRdf\Dataset;
+use quickRdf\DatasetNode;
+use quickRdf\DataFactory as DF;
+use quickRdfIo\Util as RdfUtil;
+use termTemplates\QuadTemplate as QT;
+use termTemplates\PredicateTemplate as PT;
+use termTemplates\LiteralTemplate;
+use termTemplates\NamedNodeTemplate;
 use acdhOeaw\arche\lib\Repo;
 use acdhOeaw\arche\lib\RepoResource;
+use acdhOeaw\arche\lib\Schema;
 use acdhOeaw\arche\lib\exception\Conflict;
 use acdhOeaw\arche\lib\exception\NotFound;
 use acdhOeaw\UriNormalizer;
@@ -44,7 +55,7 @@ use acdhOeaw\UriNormalizer;
  *
  * @author zozlak
  */
-class MetadataCollection extends Graph {
+class MetadataCollection extends Dataset {
 
     const SKIP               = 1;
     const CREATE             = 2;
@@ -65,18 +76,6 @@ class MetadataCollection extends Graph {
      *   progress
      */
     static public bool | int $debug = false;
-
-    /**
-     * Makes given resource a proper agent
-     * 
-     * @param \EasyRdf\Resource $res
-     * @return \EasyRdf\Resource
-     */
-    static public function makeAgent(Resource $res): Resource {
-        $res->addResource('http://www.w3.org/1999/02/22-rdf-syntax-ns#type', 'http://xmlns.com/foaf/0.1/Agent');
-
-        return $res;
-    }
 
     /**
      * Repository connection object
@@ -103,24 +102,28 @@ class MetadataCollection extends Graph {
      * Is the metadata graph preprocessed already?
      */
     private bool $preprocessed = false;
+    private Schema $schema;
+    private UriNormalizer $normalizer;
 
     /**
      * Creates a new metadata parser.
      * 
      * @param Repo $repo
-     * @param string|null $file
+     * @param \Psr\Http\Message\ResponseInterface | \Psr\Http\Message\StreamInterface | resource | string $input 
+     *   Input to be parsed as RDF. Passed to the \quickRdfIo\Util::parse().
      * @param string|null $format
+     * @see \quickRdfIo\Util::parse
      */
-    public function __construct(Repo $repo, ?string $file,
-                                ?string $format = null) {
+    public function __construct(Repo $repo, mixed $input, ?string $format = null) {
         parent::__construct();
 
-        if (!empty($file)) {
-            $this->parseFile($file, $format);
+        if ($input !== null) {
+            $this->add(RdfUtil::parse($input, new DF(), $format));
         }
 
-        $this->repo = $repo;
-        UriNormalizer::init();
+        $this->repo       = $repo;
+        $this->schema     = $repo->getSchema();
+        $this->normalizer = new UriNormalizer(null, $this->schema->id, null, null, new DF());
     }
 
     /**
@@ -227,7 +230,7 @@ class MetadataCollection extends Graph {
     public function import(string $namespace, int $singleOutNmsp,
                            string $errorMode = self::ERRMODE_FAIL,
                            int $concurrency = 3, int $retries = 6): array {
-        $idProp = $this->repo->getSchema()->id;
+        $idProp = $this->schema->id;
 
         $dict = [self::SKIP, self::CREATE];
         if (!in_array($singleOutNmsp, $dict)) {
@@ -255,16 +258,16 @@ class MetadataCollection extends Graph {
         $GN           = count($toBeImported);
         $Gn           = 0;
         $reingestions = [];
-        $f            = function (Resource $res, Repo $repo) use (&$Gn, $GN,
-                                                                  $idProp,
-                                                                  &$reingestions) {
+        $f            = function (TermInterface $sbj, Repo $repo) use (&$Gn,
+                                                                       $GN,
+                                                                       $idProp,
+                                                                       &$reingestions) {
             $Gn++;
-            $uri      = $res->getUri();
+            $uri      = (string) $sbj;
             $progress = "($Gn/$GN)" . (isset($reingestions[$uri]) ? " - $reingestions[$uri] reattempt" : '');
             echo self::$debug ? "Importing $uri $progress\n" : "";
-            $this->sanitizeResource($res);
-
-            $promise1 = $this->repo->createResourceAsync($res);
+            $meta     = $this->sanitizeResource($sbj);
+            $promise1 = $this->repo->createResourceAsync($meta);
             $promise1 = $promise1->then(
                 function (RepoResource $repoRes) use ($progress) {
                     echo self::$debug ? "\tcreated " . $repoRes->getUri() . " $progress\n" : "";
@@ -272,18 +275,16 @@ class MetadataCollection extends Graph {
                 }
             );
             $promise1 = $promise1->otherwise(
-                function ($reason) use ($res, $idProp, $progress) {
+                function ($reason) use ($meta, $idProp, $progress) {
                     if (!($reason instanceof Conflict)) {
                         return new RejectedPromise($reason);
                     }
-                    $ids = array_map(function ($x) {
-                        return (string) $x;
-                    }, $res->allResources($idProp));
+                    $ids      = $meta->listObjects(new PT($idProp))->getValues();
                     $promise2 = $this->repo->getResourceByIdsAsync($ids);
                     $promise2 = $promise2->then(
-                        function (RepoResource $repoRes) use ($res, $progress) {
+                        function (RepoResource $repoRes) use ($meta, $progress) {
                             echo self::$debug ? "\tupdating " . $repoRes->getUri() . " $progress\n" : "";
-                            $repoRes->setMetadata($res);
+                            $repoRes->setMetadata($meta);
                             $promise3 = $repoRes->updateMetadataAsync();
                             return $promise3 === null ? $repoRes : $promise3->then(fn() => $repoRes);
                         }
@@ -315,9 +316,10 @@ class MetadataCollection extends Graph {
                 $notFound     = $j instanceof NotFound;
                 $networkError = $j instanceof ConnectException;
                 if ($conflict || $notFound || $networkError) {
-                    $metaRes                          = $chunk[$n];
-                    $reingestions[$metaRes->getUri()] = ($reingestions[$metaRes->getUri()] ?? 0) + 1;
-                    if ($reingestions[$metaRes->getUri()] <= $retries) {
+                    $metaRes            = $chunk[$n];
+                    $uri                = (string) $metaRes;
+                    $reingestions[$uri] = ($reingestions[$uri] ?? 0) + 1;
+                    if ($reingestions[(string) $metaRes] <= $retries) {
                         $toBeImported[] = $metaRes;
                         $sleep          = $sleep || $networkError;
                     }
@@ -327,7 +329,7 @@ class MetadataCollection extends Graph {
                         throw new IndexerException("Error during import", IndexerException::ERROR_DURING_IMPORT, $j, $commitedRepoRes);
                     } elseif ($j instanceof Throwable) {
                         $msg    = $j instanceof ClientException ? $j->getResponse()->getStatusCode() . ' ' . $j->getResponse()->getBody() : $j->getMessage();
-                        $msg    = $chunk[$n]->getUri() . ": " . $msg . "(" . get_class($j) . ")";
+                        $msg    = $chunk[$n] . ": " . $msg . "(" . get_class($j) . ")";
                         $errors .= "\t$msg\n";
                         echo self::$debug ? "\tERROR while processing $msg\n" : '';
                     }
@@ -352,68 +354,56 @@ class MetadataCollection extends Graph {
      * @param string $namespace repository resources will be created for all
      *   resources in this namespace
      * @param int $singleOutNmsp should repository resources be created
-     *   representing URIs outside $namespace (MetadataCollection::SKIP or
+     *   for URIs outside $namespace (MetadataCollection::SKIP or
      *   MetadataCollection::CREATE)
-     * @return array<Resource>
+     * @return array<TermInterface>
      */
     private function filterResources(string $namespace, int $singleOutNmsp): array {
-        $idProp = $this->repo->getSchema()->id;
-        $result = [];
+        $idProp = $this->schema->id;
+        $nnTmpl = new NamedNodeTemplate(null, NamedNodeTemplate::ANY);
         $t0     = time();
 
         echo self::$debug ? "Filtering resources...\n" : '';
-        foreach ($this->resources() as $res) {
-            $nonIdProps = array_diff($res->propertyUris(), [$idProp]);
-            $inNmsp     = false;
-            $ids        = [];
-            foreach ($res->allResources($idProp) as $id) {
-                $id     = (string) $id;
-                $ids[]  = $id;
-                $inNmsp = $inNmsp || strpos($id, $namespace) === 0;
-            }
 
-            if (count($ids) == 0) {
-                echo self::$debug ? "\t" . $res->getUri() . " skipping - no ids\n" : '';
-            } elseif (count($nonIdProps) == 0 && $this->isIdElsewhere($res)) {
-                echo self::$debug ? "\t" . $res->getUri() . " skipping - single id assigned to another resource\n" : '';
-            } elseif (count($nonIdProps) == 0 && $singleOutNmsp !== MetadataCollection::CREATE && !$inNmsp) {
-                echo self::$debug ? "\t" . $res->getUri() . " skipping - onlyIds, outside namespace and mode == MetadataCollection::SKIP\n" : '';
-            } else {
-                echo self::$debug > 1 ? "\t" . $res->getUri() . " including\n" : '';
-                $result[] = $res;
-            }
+        if ($singleOutNmsp === MetadataCollection::CREATE) {
+            $valid = iterator_to_array($this->listSubjects(new QT($nnTmpl, $idProp)));
+        } else {
+            // accept only subjects having (at least one) ID in $namespace 
+            // or (at lest one) non-ID property
+            $validTmp = new SplObjectStorage();
+            foreach ($this->getIterator(new QT($nnTmpl)) as $quad) {
+                $sbj      = $quad->getSubject();
+                $nonIdCond   = !$idProp->equals($quad->getPredicate());
+                $nmspCond = $idProp && str_starts_with((string) $quad->getObject(), $namespace);
+                if ($nonIdCond || $nmspCond) {
+                    $validTmp->attach($sbj);
+                }
 
-            $t1 = time();
-            if ($t1 > $t0 && $this->repo->inTransaction()) {
-                $this->repo->prolong();
-                $t0 = $t1;
-            }
-        }
-
-        return $result;
-    }
-
-    /**
-     * Checks if a given resource is a schema:id of some other node in
-     * the graph.
-     * 
-     * @param Resource $res
-     * @return bool
-     */
-    private function isIdElsewhere(Resource $res): bool {
-        $revMatches = $this->reversePropertyUris($res);
-        foreach ($revMatches as $prop) {
-            if ($prop !== $this->repo->getSchema()->id) {
-                continue;
-            }
-            $matches = $this->resourcesMatching($prop, $res);
-            foreach ($matches as $i) {
-                if ($i->getUri() != $res->getUri()) {
-                    return true;
+                $t1 = time();
+                if ($t1 > $t0 && $this->repo->inTransaction()) {
+                    $this->repo->prolong();
+                    $t0 = $t1;
                 }
             }
+            $valid = [];
+            foreach ($validTmp as $sbj) {
+                $valid[] = $sbj;
+            }
         }
-        return false;
+        if (self::$debug) {
+            $skipSbj = $this->listSubjects()->getValues();
+            $skipSbj = array_diff($skipSbj, array_map(fn($x) => (string) $x, $valid));
+            foreach ($skipSbj as $i) {
+                echo "\t$i skipping\n";
+            }
+        }
+        if (self::$debug > 1) {
+            foreach ($valid as $i) {
+                echo "\t$i including\n";
+            }
+        }
+
+        return $valid;
     }
 
     /**
@@ -427,24 +417,16 @@ class MetadataCollection extends Graph {
      */
     private function fixReferences(): void {
         echo self::$debug ? "Fixing references...\n" : '';
-        $idProp = $this->repo->getSchema()->id;
-        // collect id => uri mappings
-        $map    = [];
-        foreach ($this->resources() as $i) {
-            foreach ($i->allResources($idProp) as $v) {
-                $map[(string) $v] = (string) $i;
-            }
-        }
-        // fix references
-        foreach ($this->resources() as $i) {
-            $properties = array_diff($i->propertyUris(), [$idProp]);
-            foreach ($properties as $p) {
-                foreach ($i->allResources($p) as $v) {
-                    $vv = (string) $v;
-                    if (isset($map[$vv]) && $map[$vv] !== $vv) {
-                        echo self::$debug ? "\t$vv => " . $map[$vv] . "\n" : '';
-                        $i->delete($p, $v);
-                        $i->addResource($p, $map[$vv]);
+        $idProp  = $this->schema->id;
+        // must materialize because we are going to modify the dataset
+        $idQuads = iterator_to_array($this->getIterator(new PT($idProp)));
+        foreach ($idQuads as $quad) {
+            // do not need to process "x id x"
+            if (!$quad->getSubject()->equals($quad->getObject())) {
+                foreach ($this->getIterator(new PT(null, $quad->getObject())) as $i) {
+                    // do not need to process "any id x"
+                    if (!$idProp->equals($i->getPredicate())) {
+                        $this[$i] = $i->withObject($quad->getSubject());
                     }
                 }
             }
@@ -452,51 +434,22 @@ class MetadataCollection extends Graph {
     }
 
     /**
-     * Checks if a node contains wrong edges (references to blank nodes).
-     * 
-     * @param Resource $res
-     * @return bool
-     */
-    private function containsWrongRefs(Resource $res): bool {
-        $properties = array_diff($res->propertyUris(), [$this->repo->getSchema()->id]);
-        foreach ($properties as $prop) {
-            foreach ($res->allResources($prop) as $val) {
-                if ($val->isBNode()) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
-    /**
-     * Promotes BNodes to their first schema:id and fixes references to them.
+     * Promotes BNodes to their first ID and fixes references to them.
      */
     private function promoteBNodesToUris(): void {
         echo self::$debug ? "Promoting BNodes to URIs...\n" : '';
-
-        $idProp = $this->repo->getSchema()->id;
-        $map    = [];
-        foreach ($this->resources() as $i) {
-            $id = $i->getResource($idProp);
-            if ($i->isBNode() && $id !== null) {
-                echo self::$debug ? "\t" . $i->getUri() . " => " . $id->getUri() . "\n" : '';
-                $map[$i->getUri()] = $id;
-                foreach ($i->propertyUris() as $p) {
-                    foreach ($i->all($p) as $v) {
-                        $id->add($p, $v);
-                        $i->delete($p, $v);
-                    }
-                }
-            }
-        }
-        foreach ($this->resources() as $i) {
-            foreach ($i->propertyUris() as $p) {
-                foreach ($i->allResources($p) as $v) {
-                    if (isset($map[$v->getUri()])) {
-                        $i->delete($p, $v);
-                        $i->addResource($p, $map[$v->getUri()]);
-                    }
+        $idTmpl = new PT($this->schema->id);
+        foreach ($this->listSubjects() as $sbj) {
+            if ($sbj instanceof BlankNodeInterface) {
+                $id = $this->getObject($idTmpl->withSubject($sbj));
+                if ($id !== null) {
+                    echo self::$debug ? "\t$sbj => $id\n" : '';
+                    // fix subjects
+                    $clbck = fn(QuadInterface $x) => $x->withSubject($id);
+                    $this->forEach($clbck, new QT($sbj));
+                    // fix objects
+                    $clbck = fn(QuadInterface $x) => $x->withObject($id);
+                    $this->forEach($clbck, new PT(null, $sbj));
                 }
             }
         }
@@ -506,12 +459,15 @@ class MetadataCollection extends Graph {
      * Promotes subjects being fully qualified URLs to ids.
      */
     private function promoteUrisToIds(): void {
+        $idProp = $this->schema->id;
         echo self::$debug ? "Promoting URIs to ids...\n" : '';
-        foreach ($this->resources() as $i) {
-            if (!$i->isBNode() and count($i->propertyUris()) > 0) {
-                $uri = (string) $i;
-                echo self::$debug > 1 ? "\t" . $uri . "\n" : '';
-                $i->addResource($this->repo->getSchema()->id, $uri);
+        foreach ($this->listSubjects() as $i) {
+            if (!$i instanceof BlankNodeInterface) {
+                $quad = DF::quad($i, $idProp, $i);
+                if (!isset($this[$quad])) {
+                    $this->add($quad);
+                    echo self::$debug > 1 ? "t$i\n" : '';
+                }
             }
         }
     }
@@ -519,43 +475,39 @@ class MetadataCollection extends Graph {
     /**
      * Cleans up resource metadata.
      * 
-     * @param Resource $res
-     * @return \EasyRdf\Resource
      * @throws InvalidArgumentException
      */
-    private function sanitizeResource(Resource $res): Resource {
-        $idProp     = $this->repo->getSchema()->id;
-        $titleProp  = $this->repo->getSchema()->label;
-        $relProp    = $this->repo->getSchema()->parent;
-        $nonIdProps = array_diff($res->propertyUris(), [$idProp]);
+    private function sanitizeResource(TermInterface $res): DatasetNode {
+        $idProp    = $this->schema->id;
+        $titleProp = $this->schema->label;
+        $relProp   = $this->schema->parent;
+
+        $meta = $this->copy(new QT($res));
+
+        $nonIdProps = iterator_to_array($meta->listPredicates()->skip([$idProp]));
         // don't do anything when it's purely-id resource
         if (count($nonIdProps) == 0) {
-            return $res;
+            return (new DatasetNode($res))->withDataset($meta);
         }
 
-        foreach ($res->propertyUris() as $prop) {
-            // because every triple object creates a repo resource and therefore ends up as an id
-            UriNormalizer::gNormalizeMeta($res, $prop, false);
-        }
-
-        if ($this->containsWrongRefs($res)) {
-            echo $res->copy()->getGraph()->serialise('ntriples') . "\n";
+        if ($meta->any(fn(QuadInterface $x) => $x->getObject() instanceof BlankNodeInterface)) {
+            echo "$meta\n";
             throw new InvalidArgumentException('resource contains references to blank nodes');
         }
 
-        if ($this->addTitle && count($res->allLiterals($titleProp)) === 0) {
-            $res->addLiteral($titleProp, $res->getResource($idProp), 'en');
-        }
+        $clbck = fn(QuadInterface $x) => $x->withObject(DF::namedNode($this->normalizer->normalize($x->getObject(), false)));
+        $meta->forEach($clbck, new PT($idProp));
 
-        if ($res->isA('http://xmlns.com/foaf/0.1/Person') || $res->isA('http://xmlns.com/foaf/0.1/Agent')) {
-            $res = self::makeAgent($res);
+        if ($this->addTitle && $meta->none(new PT($titleProp))) {
+            $id = $meta->getObject(new PT($idProp));
+            $meta->add(DF::quad($res, $titleProp, DF::literal((string) $id, 'und')));
         }
 
         if ($this->resource !== null) {
-            $res->addResource($relProp, $this->resource->getUri());
+            $meta->add(DF::quad($res, $relProp, $this->resource->getUri()));
         }
 
-        return $res;
+        return (new DatasetNode($res))->withDataset($meta);
     }
 
     /**
@@ -563,14 +515,12 @@ class MetadataCollection extends Graph {
      */
     private function removeLiteralIds(): void {
         echo self::$debug ? "Removing literal ids...\n" : "";
-        $idProp = $this->repo->getSchema()->id;
+        $idProp = $this->schema->id;
 
-        foreach ($this->resources() as $i) {
-            foreach ($i->allLiterals($idProp) as $j) {
-                $i->delete($idProp, $j);
-                if (self::$debug) {
-                    echo "\tremoved " . $j . " from " . $i->getUri() . "\n";
-                }
+        $removed = $this->delete(new PT($idProp, new LiteralTemplate(null, LiteralTemplate::ANY)));
+        if (self::$debug) {
+            foreach ($removed as $i) {
+                echo "\tremoved $i\n";
             }
         }
     }

@@ -1,4 +1,4 @@
 <.> <https://some.sample/property> "sample value" .
 <.> <https://some.sample/property> <https://some.sample/uri> .
-<.> <https://vocabs.acdh.oeaw.ac.at/schema#hasIdentifier> <acdhContainer:///sample.xml> .
+<.> <https://vocabs.acdh.oeaw.ac.at/schema#hasIdentifier> <acdhContainer://sample.xml> .
 <.> <https://vocabs.acdh.oeaw.ac.at/schema#hasIdentifier> <http://sws.geonames.org/135/> .

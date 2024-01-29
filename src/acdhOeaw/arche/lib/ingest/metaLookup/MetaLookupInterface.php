@@ -26,7 +26,8 @@
 
 namespace acdhOeaw\arche\lib\ingest\metaLookup;
 
-use EasyRdf\Resource;
+use rdfInterface\DatasetNodeInterface;
+use rdfInterface\NamedNodeInterface;
 
 /**
  * It is a common problem to couple binary data with their metadata.
@@ -40,11 +41,11 @@ interface MetaLookupInterface {
     /**
      * Returns metadata coupled with a file.
      * @param string $path path to the data file
-     * @param array<string> $identifiers identifiers (URIs) of the file
+     * @param array<string|NamedNodeInterface> $identifiers identifiers (URIs) of the file
      * @param bool $require should error be thrown when no metadata was found
      *   (when false a resource with no triples is returned)
-     * @return Resource fetched metadata
+     * @return DatasetNodeInterface fetched metadata
      */
     public function getMetadata(string $path, array $identifiers,
-                                bool $require = false): Resource;
+                                bool $require = false): DatasetNodeInterface;
 }

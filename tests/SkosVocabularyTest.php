@@ -27,6 +27,12 @@
 namespace acdhOeaw\arche\lib\ingest\tests;
 
 use Exception;
+use rdfInterface\QuadInterface;
+use quickRdf\DataFactory as DF;
+use termTemplates\PredicateTemplate as PT;
+use termTemplates\QuadTemplate as QT;
+use termTemplates\NotTemplate;
+use termTemplates\NamedNodeTemplate;
 use acdhOeaw\arche\lib\exception\NotFound;
 use acdhOeaw\arche\lib\ingest\SkosVocabulary;
 use zozlak\RdfConstants as RDF;
@@ -71,11 +77,14 @@ class SkosVocabularyTest extends TestBase {
         self::$test = 'removeObsolete';
         $schema     = self::$repo->getSchema();
 
-        $vocab    = new SkosVocabulary(self::$repo, __DIR__ . '/data/skosVocabulary.ttl');
-        $vocab->resource('https://foo/scheme/3')->copy([$schema->id], '/^$/', 'https://foo/scheme/9', $vocab);
+        $vocab      = new SkosVocabulary(self::$repo, __DIR__ . '/data/skosVocabulary.ttl');
+        // make a copy of https://foo/scheme/3 as https://foo/scheme/9
+        $newConcept = DF::namedNode('https://foo/scheme/9');
+        $tmpl       = new QT(DF::namedNode('https://foo/scheme/3'), new NotTemplate($schema->id));
+        $vocab->add($vocab->map(fn(QuadInterface $x) => $x->withSubject($newConcept), $tmpl));
         $vocab->preprocess();
         self::$repo->begin();
-        $imported = $vocab->import();
+        $imported   = $vocab->import();
         self::$repo->commit();
         $this->noteResources($imported);
         $this->assertCount(4, $imported);
@@ -144,12 +153,12 @@ class SkosVocabularyTest extends TestBase {
         $this->assertCount(4, $imported);
         foreach ($imported as $i) {
             $meta = $i->getGraph();
-            $this->assertCount(1, $meta->allResources(RDF::RDF_TYPE));
-            $this->assertCount(0, $meta->all('http://purl.org/dc/elements/1.1/title'));
-            $this->assertCount(0, $meta->all($parentProp));
-            $ids  = array_map(fn($x) => (string) $x, $meta->all($idProp));
-            $ids  = array_diff($ids, [$i->getUri()]);
-            $this->assertEquals($ids[0] ?? '__error__', (string) $meta->get($titleProp));
+            $this->assertCount(1, $meta->copy(new PT(DF::namedNode(RDF::RDF_TYPE))));
+            $this->assertTrue($meta->none(new PT(DF::namedNode('http://purl.org/dc/elements/1.1/title'))));
+            $this->assertTrue($meta->none(new PT($parentProp)));
+            $ids  = $meta->listObjects(new PT($idProp))->getValues();
+            $ids  = array_diff($ids, [(string) $i->getUri()]);
+            $this->assertEquals($ids[0] ?? '__error__', (string) $meta->getObject(new PT($titleProp)));
         }
     }
 
@@ -159,9 +168,9 @@ class SkosVocabularyTest extends TestBase {
     public function testFromUrl(): void {
         self::$test = 'fromUrl';
         $idProp     = self::$repo->getSchema()->id;
-        $url        = 'https://vocabs.acdh.oeaw.ac.at/rest/v1/arche_licenses/data';
+        $url        = DF::namedNode('https://vocabs.acdh.oeaw.ac.at/rest/v1/arche_licenses/data');
         $vocab      = SkosVocabulary::fromUrl(self::$repo, $url);
-        $this->assertCount(1, $vocab->resourcesMatching($idProp, $vocab->resource($url)));
+        $this->assertCount(1, $vocab->copy(new PT($idProp, $url)));
         unset($vocab);
     }
 
@@ -169,6 +178,7 @@ class SkosVocabularyTest extends TestBase {
      * @group SkosVocabulary
      */
     public function testSkosAsLiteral(): void {
+        $objTmpl = new NamedNodeTemplate(null, NamedNodeTemplate::ANY);
         $vocab    = (new SkosVocabulary(self::$repo, __DIR__ . '/data/skosVocabulary.ttl'))
             ->setExactMatchMode(SkosVocabulary::EXACTMATCH_LITERAL, SkosVocabulary::EXACTMATCH_DROP)
             ->setSkosRelationsMode(SkosVocabulary::RELATIONS_LITERAL, SkosVocabulary::RELATIONS_LITERAL);
@@ -180,10 +190,10 @@ class SkosVocabularyTest extends TestBase {
         $this->assertCount(4, $imported);
         foreach ($imported as $i) {
             $meta = $i->getGraph();
-            $this->assertCount(0, $meta->allResources(RDF::SKOS_EXACT_MATCH));
-            $this->assertCount(0, $meta->allResources(RDF::SKOS_IN_SCHEME));
+            $this->assertTrue($meta->none(new PT(DF::namedNode(RDF::SKOS_EXACT_MATCH), $objTmpl)));
+            $this->assertTrue($meta->none(new PT(DF::namedNode(RDF::SKOS_IN_SCHEME), $objTmpl)));
             if ($i->isA(RDF::SKOS_CONCEPT)) {
-                $this->assertCount(1, $meta->allLiteral(RDF::SKOS_IN_SCHEME));
+                $this->assertCount(1, $meta->copy(new PT(DF::namedNode(RDF::SKOS_IN_SCHEME))));
             }
         }
     }
@@ -196,7 +206,7 @@ class SkosVocabularyTest extends TestBase {
 
         file_put_contents($tmpFile, '<https://foo/bar> <https://bar/baz> "foo" .');
         try {
-            new SkosVocabulary(self::$repo, $tmpFile);
+            new SkosVocabulary(self::$repo, $tmpFile, 'application/n-triples');
             $this->assertTrue(false, 'No error on no skos:ConceptSchema');
         } catch (Exception $ex) {
             $this->assertEquals('No skos:ConceptSchema found in the RDF graph', $ex->getMessage());
@@ -208,7 +218,7 @@ class SkosVocabularyTest extends TestBase {
         ";
         file_put_contents($tmpFile, $vocabulary);
         try {
-            new SkosVocabulary(self::$repo, $tmpFile);
+            new SkosVocabulary(self::$repo, $tmpFile, 'application/n-triples');
             $this->assertTrue(false, 'No error on many skos:ConceptSchema');
         } catch (Exception $ex) {
             $this->assertEquals('Many skos:ConceptSchema found in the RDF graph', $ex->getMessage());

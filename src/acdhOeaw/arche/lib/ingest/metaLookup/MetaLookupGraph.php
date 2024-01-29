@@ -26,8 +26,15 @@
 
 namespace acdhOeaw\arche\lib\ingest\metaLookup;
 
-use EasyRdf\Resource;
-use EasyRdf\Graph;
+use rdfInterface\DatasetInterface;
+use rdfInterface\DatasetNodeInterface;
+use rdfInterface\NamedNodeInterface;
+use quickRdf\DataFactory as DF;
+use quickRdf\DatasetNode;
+use termTemplates\QuadTemplate as QT;
+use termTemplates\PredicateTemplate as PT;
+use termTemplates\NamedNodeTemplate;
+use termTemplates\AnyOfTemplate;
 
 /**
  * Searches for file metadata inside an RDF graph.
@@ -38,33 +45,25 @@ class MetaLookupGraph implements MetaLookupInterface {
 
     /**
      * Debug flag - setting it to true causes loggin messages to be displayed.
-     * @var bool
      */
-    static public $debug = false;
+    static public bool $debug = false;
 
     /**
      * Graph with all metadata
-     * @var \EasyRdf\Graph
      */
-    private $graph;
+    private DatasetInterface $graph;
+    private NamedNodeInterface $idProp;
 
     /**
-     *
-     * @var string
+     * Creates a MetaLookupGraph from a given dataset
      */
-    private $idProp;
-
-    /**
-     * Creates a MetaLookupGraph from a given EasyRdf\Graph
-     * @param \EasyRdf\Graph $graph metadata graph
-     */
-    public function __construct(Graph $graph, string $idProp) {
+    public function __construct(DatasetInterface $graph,
+                                NamedNodeInterface $idProp) {
         $this->graph  = $graph;
         $this->idProp = $idProp;
-        foreach ($this->graph->resources() as $i) {
-            if (!$i->isBNode() && count($i->properties()) > 0) {
-                $i->addResource($this->idProp, $i->getUri());
-            }
+        $sbjs         = $this->graph->listSubjects(new QT(new NamedNodeTemplate(null, NamedNodeTemplate::ANY)));
+        foreach ($sbjs as $sbj) {
+            $this->graph->add(DF::quad($sbj, $this->idProp, $sbj));
         }
     }
 
@@ -72,24 +71,22 @@ class MetaLookupGraph implements MetaLookupInterface {
      * Searches for metadata of a given file.
      * @param string $path path to the file (just for conformance with
      *   the interface, it is not used)
-     * @param array<string> $identifiers file's identifiers (URIs)
+     * @param array<string|NamedNodeInterface> $identifiers file's identifiers (URIs)
      * @param bool $require should error be thrown when no metadata was found
      *   (when false a resource with no triples is returned)
-     * @return \EasyRdf\Resource fetched metadata
+     * @return DatasetNodeInterface fetched metadata
      * @throws MetaLookupException
      */
     public function getMetadata(string $path, array $identifiers,
-                                bool $require = false): Resource {
-        $candidates = [];
-        foreach ($identifiers as $id) {
-            foreach ($this->graph->resourcesMatching($this->idProp, $this->graph->resource($id)) as $i) {
-                $candidates[$i->getUri()] = $i;
-            }
-        }
+                                bool $require = false): DatasetNodeInterface {
+        $identifiers = array_map(fn($x) => $x instanceof NamedNodeInterface ? $x : DF::namedNode($x), $identifiers);
+        $tmpl        = new AnyOfTemplate($identifiers);
+        $candidates  = $this->graph->listSubjects(new PT($this->idProp, $tmpl));
+        $candidates  = iterator_to_array($candidates);
 
         if (count($candidates) == 1) {
             echo self::$debug ? "  metadata found\n" : '';
-            return array_pop($candidates);
+            return new DatasetNode(current($candidates), $this->graph);
         } else if (count($candidates) > 1) {
             throw new MetaLookupException('more then one metadata resource');
         }
@@ -98,8 +95,7 @@ class MetaLookupGraph implements MetaLookupInterface {
         if ($require) {
             throw new MetaLookupException('External metadata not found');
         } else {
-            return(new Graph())->resource('.');
+            return new DatasetNode(current($identifiers));
         }
     }
-
 }

@@ -26,7 +26,8 @@
 
 namespace acdhOeaw\arche\lib\ingest\metaLookup;
 
-use EasyRdf\Resource;
+use rdfInterface\NamedNodeInterface;
+use rdfInterface\DatasetNodeInterface;
 
 /**
  * Returns a fixed set of metadata properties to every file.
@@ -36,25 +37,25 @@ use EasyRdf\Resource;
  */
 class MetaLookupConstant implements MetaLookupInterface {
 
-    private Resource $metadata;
+    private DatasetNodeInterface $metadata;
 
-    public function __construct(Resource $res) {
-        $this->metadata = $res;
+    public function __construct(DatasetNodeInterface $res) {
+        $this->metadata = $res->copy();
     }
 
     /**
      * Searches for metadata of a given file.
      * @param string $path path to the file (just for conformance with
      *   the interface, it is not used)
-     * @param array<string> $identifiers file's identifiers (URIs) - just for
+     * @param array<string|NamedNodeInterface> $identifiers file's identifiers (URIs) - just for
      *   conformance with the interface, they are not used
      * @param bool $require should error be thrown when no metadata was found
      *   (not used, this class always returns metadata)
-     * @return \EasyRdf\Resource fetched metadata
+     * @return DatasetNodeInterface fetched metadata
      * @throws MetaLookupException
      */
     public function getMetadata(string $path, array $identifiers,
-                                bool $require = false): Resource {
+                                bool $require = false): DatasetNodeInterface {
         return $this->metadata->copy();
     }
 }

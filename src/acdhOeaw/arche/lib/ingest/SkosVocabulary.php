@@ -28,13 +28,24 @@ namespace acdhOeaw\arche\lib\ingest;
 
 use BadMethodCallException;
 use RuntimeException;
-use EasyRdf\Literal;
-use EasyRdf\Resource;
 use GuzzleHttp\Client;
 use GuzzleHttp\Psr7\Request;
 use GuzzleHttp\Promise\RejectedPromise;
 use GuzzleHttp\Exception\ClientException;
 use zozlak\RdfConstants as RDF;
+use rdfInterface\LiteralInterface;
+use rdfInterface\NamedNodeInterface;
+use rdfInterface\QuadInterface;
+use rdfInterface\TermInterface;
+use quickRdf\Dataset;
+use quickRdf\DatasetNode;
+use quickRdf\DataFactory as DF;
+use termTemplates\QuadTemplate as QT;
+use termTemplates\PredicateTemplate as PT;
+use termTemplates\ValueTemplate as VT;
+use termTemplates\NamedNodeTemplate;
+use termTemplates\AnyOfTemplate;
+use termTemplates\NotTemplate;
 use acdhOeaw\arche\lib\Repo;
 use acdhOeaw\arche\lib\SearchConfig;
 use acdhOeaw\arche\lib\SearchTerm;
@@ -116,7 +127,7 @@ class SkosVocabulary extends MetadataCollection {
 
     private string $file;
     private string $format;
-    private string $vocabularyUrl;
+    private NamedNodeInterface $vocabularyUrl;
     private string $state;
 
     /**
@@ -186,16 +197,17 @@ class SkosVocabulary extends MetadataCollection {
         copy($file, $this->file);
 
         // make sure the RDF graph contains exactly one vocabulary
-        $schemas = $this->allOfType(RDF::SKOS_CONCEPT_SCHEMA);
+        $schemas = $this->listSubjects(new PT(DF::namedNode(RDF::RDF_TYPE), DF::namedNode(RDF::SKOS_CONCEPT_SCHEMA)));
+        $schemas = iterator_to_array($schemas);
         if (count($schemas) === 0) {
             throw new RuntimeException("No skos:ConceptSchema found in the RDF graph");
         }
         if (count($schemas) > 1) {
             throw new RuntimeException("Many skos:ConceptSchema found in the RDF graph");
         }
-        $this->vocabularyUrl = $schemas[0]->getUri();
+        $this->vocabularyUrl = current($schemas);
         if (!empty($uri)) {
-            $this->resource($this->vocabularyUrl)->addResource($schema->id, $uri);
+            $this->add(DF::quad($this->vocabularyUrl, $schema->id, DF::namedNode($uri)));
         }
 
         // check if the vocabulary is up to date
@@ -203,7 +215,7 @@ class SkosVocabulary extends MetadataCollection {
         try {
             $repoRes     = $this->repo->getResourceById($this->vocabularyUrl);
             $repoRes->loadMetadata(false, RRI::META_RESOURCE, null, [$schema->hash]);
-            list($hashName, $repoResHash) = explode(':', (string) $repoRes->getGraph()->getLiteral($schema->hash));
+            list($hashName, $repoResHash) = explode(':', (string) ($repoRes->getGraph()->getObject(new PT($schema->hash) ?? 'sha1:')));
             $hash        = hash_init($hashName);
             hash_update_file($hash, $file);
             $hash        = hash_final($hash, false);
@@ -378,17 +390,19 @@ class SkosVocabulary extends MetadataCollection {
             echo self::$debug ? "Skipping preprocessing - vocabulary is up to date\n" : '';
             return $this;
         }
+        $rdfTypeTmpl = new PT(DF::namedNode(RDF::RDF_TYPE));
 
         // find all concepts in the SKOS scheme
-        $concepts    = $this->resourcesMatching(RDF::SKOS_IN_SCHEME, $this->resource($this->vocabularyUrl));
-        $concepts    = array_map(fn($x) => $x->getUri(), $concepts);
+        $concepts    = $this->listSubjects(new PT(DF::namedNode(RDF::SKOS_IN_SCHEME), $this->vocabularyUrl));
+        $concepts    = iterator_to_array($concepts);
         $collections = [];
         if ($this->importCollections) {
             $collections = [
-                $this->resourcesMatching(RDF::RDF_TYPE, $this->resource(RDF::SKOS_COLLECTION)),
-                $this->resourcesMatching(RDF::RDF_TYPE, $this->resource(RDF::SKOS_ORDERED_COLLECTION))
+                $this->listSubjects($rdfTypeTmpl->withObject(DF::namedNode(RDF::SKOS_COLLECTION))),
+                $this->listSubjects($rdfTypeTmpl->withObject(DF::namedNode(RDF::SKOS_ORDERED_COLLECTION))),
             ];
-            $collections = array_unique(array_map(fn($x) => $x->getUri(), array_merge($collections[0], $collections[1])));
+            $collections = array_map(fn($x) => iterator_to_array($x), $collections);
+            $collections = array_merge(...$collections);
         }
 
         // preprocess
@@ -428,7 +442,7 @@ class SkosVocabulary extends MetadataCollection {
             return [];
         }
 
-        // perform the inestion
+        // perform the ingestion
         $imported = parent::import($namespace, $singleOutNmsp, $errorMode, $concurrency, $retriesOnConflict);
 
         // upload vocabulary binary
@@ -447,7 +461,7 @@ class SkosVocabulary extends MetadataCollection {
 
     /**
      * 
-     * @param array<string> $entities
+     * @param array<NamedNodeInterface> $entities
      * @return void
      */
     private function processRelations(array $entities): void {
@@ -455,95 +469,88 @@ class SkosVocabulary extends MetadataCollection {
             return;
         }
         echo self::$debug ? "Processing skos relations...\n" : "";
-        foreach ($entities as $resUri) {
-            $res   = $this->resource($resUri);
-            $props = array_intersect(self::$skosRelations, $res->propertyUris());
-            foreach ($props as $prop) {
-                foreach ($res->allResources($prop) as $obj) {
-                    /** @var Resource $obj */
-                    $mode = in_array($obj->getUri(), $entities) ? $this->relationsModeSchema : $this->relationsMode;
-                    if ($mode === self::RELATIONS_DROP) {
-                        echo self::$debug > 1 ? "\tRemoving <" . $res->getUri() . "> <$prop> <" . $obj->getUri() . ">\n" : '';
-                        $res->delete($prop, $obj);
-                    } elseif ($mode === self::RELATIONS_LITERAL) {
-                        echo self::$debug > 1 ? "\tTurning <" . $res->getUri() . "> <$prop> <" . $obj->getUri() . "> into literal\n" : '';
-                        $res->delete($prop, $obj);
-                        $res->add($prop, new Literal($obj->getUri(), null, RDF::XSD_ANY_URI));
-                    }
-                }
+        $xsdUri      = DF::namedNode(RDF::XSD_ANY_URI);
+        $entitiesStr = array_map(fn($x) => (string) $x, $entities);
+        $sbjTmpl     = new AnyOfTemplate($entities);
+        $propTmpl    = new AnyOfTemplate(array_map(fn($x) => DF::namedNode($x), self::$skosRelations));
+        foreach ($this->copy(new QT($sbjTmpl, $propTmpl)) as $relation) {
+            $sbj  = $relation->getSubject();
+            $prop = $relation->getPredicate();
+            $obj  = $relation->getObject();
+            $mode = in_array((string) $obj, $entitiesStr) ? $this->relationsModeSchema : $this->relationsMode;
+            if ($mode === self::RELATIONS_DROP) {
+                echo self::$debug > 1 ? "\tRemoving <$sbj> <$prop> <$obj>\n" : '';
+                $this->delete($relation);
+            } elseif ($mode === self::RELATIONS_LITERAL) {
+                echo self::$debug > 1 ? "\tTurning <$sbj> <$prop> <$obj> into literal\n" : '';
+                $this->delete($relation);
+                $this->add(DF::quad($sbj, $prop, DF::literal((string) $obj, null, $xsdUri)));
             }
         }
     }
 
     /**
      * 
-     * @param array<string> $entities
+     * @param array<TermInterface> $entities
      * @return array<string>
      */
     private function processExactMatches(array $entities): array {
         if ($this->exactMatchMode === self::EXACTMATCH_KEEP && $this->exactMatchModeSchema === self::EXACTMATCH_KEEP) {
             return $entities;
         }
+        $matchTmpl = new PT(DF::namedNode(RDF::SKOS_EXACT_MATCH));
+        $xsdUri    = DF::namedNode(RDF::XSD_ANY_URI);
+        $asLiteral = fn(QuadInterface $x) => $x->withObject(DF::literal((string) $x->getObject(), null, $xsdUri));
 
-        $drop = [];
         echo self::$debug ? "Processing skos:exactMatch...\n" : "";
-        foreach ($entities as $resUri) {
-            $res = $this->resource($resUri);
-            foreach ($res->allResources(RDF::SKOS_EXACT_MATCH) as $obj) {
-                $mode = in_array($obj->getUri(), $entities) ? $this->exactMatchModeSchema : $this->exactMatchMode;
+        $drop        = [];
+        $entitiesStr = array_map(fn($x) => (string) $x, $entities);
+        foreach ($entities as $sbj) {
+            $tmpl = $matchTmpl->withSubject($sbj);
+            foreach ($this->listObjects($tmpl) as $obj) {
+                $mode = in_array((string) $obj, $entitiesStr) ? $this->exactMatchModeSchema : $this->exactMatchMode;
                 if ($mode === self::EXACTMATCH_DROP) {
-                    echo self::$debug > 1 ? "\tRemoving <" . $res->getUri() . "> skos:exactMatch <" . $obj->getUri() . ">\n" : '';
-                    $res->delete(RDF::SKOS_EXACT_MATCH, $obj);
+                    echo self::$debug > 1 ? "\tRemoving <$sbj> skos:exactMatch <$obj>\n" : '';
+                    $this->delete($tmpl->withObject($obj));
                 } elseif ($mode === self::EXACTMATCH_LITERAL) {
-                    echo self::$debug > 1 ? "\tTurning <" . $res->getUri() . "> skos:exactMatch <" . $obj->getUri() . "> into literal\n" : '';
-                    $res->delete(RDF::SKOS_EXACT_MATCH, $obj);
-                    $res->add(RDF::SKOS_EXACT_MATCH, new Literal($obj->getUri(), null, RDF::XSD_ANY_URI));
+                    echo self::$debug > 1 ? "\tTurning <$sbj> skos:exactMatch <$obj> into literal\n" : '';
+                    $this->forEach($asLiteral, $tmpl->withObject($obj));
                 } elseif ($mode === self::EXACTMATCH_MERGE) {
-                    echo self::$debug > 1 ? "\tMerging <" . $obj->getUri() . "> into <" . $res->getUri() . ">\n" : '';
-                    $this->mergeConcepts($res, $obj);
-                    $drop[] = $obj->getUri();
+                    echo self::$debug > 1 ? "\tMerging <$obj> into <$sbj>\n" : '';
+                    $this->mergeConcepts($sbj, $obj);
+                    $drop[] = $obj;
                 }
             }
         }
-        return array_diff($entities, $drop);
+        return array_filter($entities, fn(TermInterface $x) => !in_array((string) $x, $drop));
     }
 
     /**
      * 
-     * @param array<string> $entities
+     * @param array<TermInterface> $entities
      * @return void
      */
     private function assureTitles(array $entities): void {
         echo self::$debug ? "Processing titles...\n" : "";
+        $titleTmpl      = new AnyOfTemplate(array_map(fn($x) => DF::namedNode($x), $this->titleProperties));
         $titleProp = $this->repo->getSchema()->label;
-        foreach ($entities as $resUri) {
-            $res = $this->resource($resUri);
-            if ($res->getLiteral($titleProp) !== null) {
+        foreach ($entities as $sbj) {
+            if ($this->any(new QT($sbj, $titleProp))) {
                 continue;
             }
-            $added = false;
-            foreach ($this->titleProperties as $prop) {
-                foreach ($res->all($prop) as $i) {
-                    if (!($i instanceof Literal)) {
-                        $i = new Literal((string) $i, 'und');
-                    }
-                    echo self::$debug > 1 ? "\tadding <" . $res->getUri() . "> '" . $i->getValue() . "'@" . $i->getLang() . "\n" : '';
-                    $res->addLiteral($titleProp, $i);
-                    $added = true;
-                }
-                if ($added) {
-                    break;
-                }
+            $obj = $this->getObject(new QT($sbj, $titleTmpl));
+            $obj ??= DF::literal((string) $sbj, 'und');
+            if (!($obj instanceof LiteralInterface)) {
+                $obj = DF::literal((string) $obj, 'und');
             }
-            if (!$added) {
-                $res->addLiteral($titleProp, new Literal($resUri, 'und'));
-            }
+            echo self::$debug > 1 ? "\tadding <$sbj> '$obj'@" . $obj->getLang() . "\n" : '';
+            $this->add(DF::quad($sbj, $titleProp, $obj));
         }
     }
 
     /**
      * 
-     * @param array<string> $entities
+     * @param array<TermInterface> $entities
      * @return void
      */
     private function dropProperties(array $entities): void {
@@ -555,19 +562,19 @@ class SkosVocabulary extends MetadataCollection {
         $allowedNmsp = array_merge($allowedNmsp, $this->allowedNmsp);
 
         echo self::$debug ? "Removing properties outside of allowed namespaces...\n" : "";
-        foreach ($entities as $resUri) {
-            $res = $this->resource($resUri);
-            foreach ($res->propertyUris() as $prop) {
-                $delete = true;
+        foreach ($entities as $sbj) {
+            foreach ($this->listPredicates(new QT($sbj)) as $prop) {
+                $delete  = true;
+                $propStr = (string) $prop;
                 foreach ($allowedNmsp as $nmsp) {
-                    if (str_starts_with($prop, $nmsp)) {
+                    if (str_starts_with($propStr, $nmsp)) {
                         $delete = false;
                         break;
                     }
                 }
                 if ($delete) {
-                    echo self::$debug > 1 ? "\tRemoving $prop from " . $res->getUri() . "\n" : '';
-                    $res->delete($prop);
+                    echo self::$debug > 1 ? "\tRemoving $prop from $sbj\n" : '';
+                    $this->delete(new QT($sbj, $prop));
                 }
             }
         }
@@ -575,108 +582,95 @@ class SkosVocabulary extends MetadataCollection {
 
     /**
      * 
-     * @param array<string> $entities
+     * @param array<TermInterface> $entities
      * @return void
      */
     private function assureLiterals(array $entities): void {
         if ($this->allowedResourceNmsp === null) {
             return;
         }
-        $schema  = $this->repo->getSchema();
-        $allowed = array_merge([$schema->id, $schema->parent, RDF::RDF_TYPE, RDF::NMSP_SKOS], $this->allowedResourceNmsp);
+        $schema    = $this->repo->getSchema();
+        $allowed   = array_merge(
+            [(string) $schema->id, $schema->parent, RDF::RDF_TYPE, RDF::NMSP_SKOS],
+            $this->allowedResourceNmsp
+        );
+        $asLiteral = function (QuadInterface $x) {
+            echo SkosVocabulary::$debug > 1 ? "\t<" . $x->getSubject() . "> <" . $x->getPredicate() . "> '" . $x->getObject() . "'\n" : '';
+            return $x->withObject(DF::literal((string) $x->getObject(), null, RDF::XSD_ANY_URI));
+        };
         echo self::$debug ? "Mapping resources to literals...\n" : "";
-        foreach ($entities as $resUri) {
-            $res = $this->resource($resUri);
-            foreach ($res->propertyUris() as $prop) {
+        foreach ($entities as $sbj) {
+            foreach ($this->listPredicates(new QT($sbj)) as $prop) {
                 foreach ($allowed as $i) {
                     if (str_starts_with($prop, $i)) {
                         continue 2;
                     }
                 }
-                foreach ($res->allResources($prop) as $i) {
-                    echo self::$debug > 1 ? "\t<" . $res->getUri() . "> <$prop> '$i'\n" : '';
-                    $res->addLiteral($prop, new Literal($i->getUri(), null, RDF::XSD_ANY_URI));
-                    $res->deleteResource($prop, $i);
-                }
+                $this->forEach($asLiteral, new QT($sbj, $prop, new NamedNodeTemplate(null, NamedNodeTemplate::ANY)));
             }
         }
     }
 
     /**
      * 
-     * @param array<string> $entities
+     * @param array<TermInterface> $entities
      * @return void
      */
     private function assureParents(array $entities): void {
         if (!$this->addParentProperty) {
             return;
         }
-        $parentProp = $this->repo->getSchema()->parent;
-        foreach ($entities as $resUri) {
-            $res = $this->resource($resUri);
-            $res->addResource($parentProp, $this->vocabularyUrl);
-        }
+        $prop = $this->repo->getSchema()->parent;
+        $url  = $this->vocabularyUrl;
+        $this->add(array_map(fn($x) => DF::quad($x, $prop, $url), $entities));
     }
 
     /**
      * 
-     * @param array<string> $entities
+     * @param array<TermInterface> $entities
      * @return void
      */
     private function dropNodes(array $entities): void {
         echo self::$debug ? "Removing nodes not connected with the vocabulary...\n" : "";
 
-        $valid = $entities;
+        $valid = [];
         $queue = $entities;
         while (count($queue) > 0) {
-            $res = $this->resource(array_pop($queue));
-            foreach ($res->propertyUris() as $prop) {
-                foreach ($res->allResources($prop) as $obj) {
-                    $obj = $obj->getUri();
-                    if (!in_array($obj, $valid)) {
-                        $valid[] = $obj;
-                        $queue[] = $obj;
-                    }
-                }
+            $sbj   = array_pop($queue);
+            if (!isset($valid[(string)$sbj])) {
+                $valid[(string)$sbj] = $sbj;
+                $queue = array_merge(
+                    $queue,
+                    iterator_to_array($this->listObjects(new QT($sbj, null, new NamedNodeTemplate(null, NamedNodeTemplate::ANY))))
+                );
             }
         }
-        $toDrop = array_map(fn($x) => $x->getUri(), $this->resources());
-        $toDrop = array_diff($toDrop, $valid);
-        foreach ($toDrop as $resUri) {
-            echo self::$debug > 1 ? "\t$resUri\n" : '';
-            $res = $this->resource($resUri);
-            // there's no need to care about reverse properties as resources
-            // to delete form a separate subgraph
-            foreach ($res->propertyUris() as $prop) {
-                $res->delete($prop);
-            }
-        }
+        $removed = $this->deleteExcept(new QT(new AnyOfTemplate($valid)));
+        echo self::$debug > 1 ? "$removed\n" : '';
     }
 
-    private function mergeConcepts(Resource $into, Resource $res): void {
-        $idProp = $this->repo->getSchema()->id;
+    private function mergeConcepts(TermInterface $into, TermInterface $res): void {
+        $idProp    = $this->repo->getSchema()->id;
+        $matchProp = DF::namedNode(RDF::SKOS_EXACT_MATCH);
+        $matchTmpl = new PT($matchProp);
 
         // as skos:exactMatch is transitive, collect all concepts to be merged
-        $toMerge = [$res->getUri()];
-        $queue   = $toMerge;
-        while (count($queue) > 0) {
-            $res = $this->resource(array_pop($queue));
-            foreach ($res->allResources(RDF::SKOS_EXACT_MATCH) as $obj) {
-                $obj = $obj->getUri();
-                if ($obj !== $into->getUri() && !in_array($obj, $toMerge)) {
-                    $queue[]   = $obj;
-                    $toMerge[] = $obj;
+        $mergeQueue = [$res];
+        $mergedStr  = [(string) $into];
+        while (count($mergeQueue) > 0) {
+            $sbj         = array_pop($mergeQueue);
+            $mergedStr[] = (string) $sbj;
+            foreach ($this->listObjects($matchTmpl->withSubject($sbj)) as $obj) {
+                if (!in_array((string) $obj, $mergedStr)) {
+                    $mergeQueue[] = $obj;
                 }
             }
         }
 
-        foreach ($toMerge as $resUri) {
-            $into->deleteResource(RDF::SKOS_EXACT_MATCH, $resUri);
-            $into->addResource($idProp, $resUri);
-            $res = $this->resource($resUri);
-            foreach ($res->propertyUris() as $prop) {
-                $res->delete($prop);
-            }
+        foreach ($mergedStr as $sbj) {
+            $sbj = DF::namedNode($sbj);
+            $this->delete(new QT($sbj));
+            $this->add(DF::quad($into, $idProp, $sbj));
         }
     }
 

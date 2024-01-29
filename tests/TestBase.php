@@ -27,9 +27,8 @@
 namespace acdhOeaw\arche\lib\ingest\tests;
 
 use DateTime;
-use GuzzleHttp\Exception\ClientException;
 use acdhOeaw\arche\lib\Repo;
-use acdhOeaw\arche\lib\RepoResource;
+use acdhOeaw\arche\lib\Schema;
 use acdhOeaw\arche\lib\RepoResourceInterface;
 use acdhOeaw\arche\lib\exception\Deleted;
 use acdhOeaw\arche\lib\exception\NotFound;
@@ -43,12 +42,14 @@ abstract class TestBase extends \PHPUnit\Framework\TestCase {
 
     static protected Repo $repo;
     static protected object $config;
+    static protected Schema $schema;
     static protected string $test = '';
 
     static public function setUpBeforeClass(): void {
         $cfgFile      = __DIR__ . '/config.yaml';
         self::$config = json_decode(json_encode(yaml_parse_file($cfgFile)));
         self::$repo   = Repo::factory($cfgFile);
+        self::$schema = self::$repo->getSchema();
         if (file_exists(__DIR__ . '/time.log')) {
             unlink(__DIR__ . '/time.log');
         }

@@ -29,14 +29,18 @@ namespace acdhOeaw\arche\lib\ingest;
 use DateTime;
 use RuntimeException;
 use SplFileInfo;
-use EasyRdf\Resource;
 use GuzzleHttp\Promise\PromiseInterface;
-use GuzzleHttp\Promise\RejectedPromise;
+use rdfInterface\DatasetInterface;
+use rdfInterface\DatasetNodeInterface;
+use rdfInterface\QuadInterface;
+use quickRdf\DataFactory as DF;
+use termTemplates\QuadTemplate as QT;
+use termTemplates\PredicateTemplate as PT;
+use termTemplates\AnyOfTemplate;
 use acdhOeaw\arche\lib\BinaryPayload;
 use acdhOeaw\arche\lib\Repo;
 use acdhOeaw\arche\lib\RepoResource;
 use acdhOeaw\arche\lib\exception\NotFound;
-use acdhOeaw\arche\lib\exception\Conflict;
 use acdhOeaw\arche\lib\ingest\SkippedException;
 use acdhOeaw\arche\lib\ingest\util\ProgressMeter;
 use acdhOeaw\arche\lib\ingest\util\UUID;
@@ -50,7 +54,7 @@ use acdhOeaw\arche\lib\promise\RepoResourcePromise;
 class File {
 
     private SplFileInfo $info;
-    private Resource $meta;
+    private DatasetNodeInterface $meta;
     private Repo $repo;
     private ?int $n;
     private int $sizeLimit;
@@ -61,8 +65,8 @@ class File {
     private RepoResource $repoRes;
     private int $uploadsCount = 0;
 
-    public function __construct(SplFileInfo $fileInfo, Resource $meta,
-                                Repo $repo) {
+    public function __construct(SplFileInfo $fileInfo,
+                                DatasetNodeInterface $meta, Repo $repo) {
         $this->info = $fileInfo;
         $this->meta = $meta;
         $this->repo = $repo;
@@ -146,18 +150,19 @@ class File {
     }
 
     private function versioningAsync(): RepoResourcePromise | RepoResource {
-        $schema = $this->repo->getSchema();
+        $schema  = $this->repo->getSchema();
+        $pidTmpl = new PT($schema->pid);
 
         // check if new version is needed
         $oldMeta = $this->repoRes->getMetadata();
         switch ($this->versioning) {
             case Indexer::VERSIONING_DATE:
-                $modDate    = (string) $oldMeta->getLiteral($schema->modificationDate);
+                $modDate    = (string) $oldMeta->getObject($schema->modificationDate);
                 $locModDate = (new DateTime())->setTimestamp($this->info->getMTime())->format('Y-m-d\TH:i:s');
                 $newVersion = $locModDate > $modDate;
                 break;
             case Indexer::VERSIONING_DIGEST:
-                $hash       = explode(':', (string) $oldMeta->getLiteral($schema->hash));
+                $hash       = explode(':', (string) $oldMeta->getObject(new PT($schema->hash)));
                 $locHash    = $this->getHash($hash[0]);
                 $newVersion = $hash[1] !== $locHash;
                 break;
@@ -173,7 +178,7 @@ class File {
 
         // progress meter
         $upload = $this->withinSizeLimit() ? '+ upload ' : '';
-        echo ProgressMeter::format($this->meterId, $this->n, "Processing " . $this->info->getPathname() . " ({n}/{t} {p}%): new version $upload\n");
+        echo ProgressMeter::format($this->meterId, $this->n, "Processing " . $this->info->getPathname() . " ({n}/{t} {p}%): new version $upload pidPass ".(int)$this->pidPass."\n");
 
         // create the new version
         $repoIdNmsp = $this->repo->getBaseUrl();
@@ -182,28 +187,28 @@ class File {
             $skipProp[] = $schema->pid;
         }
 
-        $newMeta = $oldMeta->copy($skipProp);
-        $newMeta->addResource($schema->isNewVersionOf, $this->repoRes->getUri());
+        $newMeta = $oldMeta->copyExcept(new PT(new AnyOfTemplate($skipProp)));
+        $newMeta->add(DF::quadNoSubject($schema->isNewVersionOf, $this->repoRes->getUri()));
         if ($this->pidPass) {
-            $oldMeta->deleteResource($schema->pid);
+            $oldMeta->delete($pidTmpl);
         }
 
-        $idSkip = [];
-        if (!$this->pidPass) {
-            foreach ($oldMeta->allResources($schema->pid) as $pid) {
-                $idSkip[] = (string) $pid;
+        $pidPass = $this->pidPass;
+        $clbck   = function (QuadInterface $quad, DatasetInterface $ds) use ($newMeta,
+                                                                             $pidPass,
+                                                                             $repoIdNmsp,
+                                                                             $schema) {
+            $id = (string) $quad->getObject();
+            if (!str_starts_with($id, $repoIdNmsp) && ($pidPass || $ds->none($quad->withPredicate($schema->pid)))) {
+                $newMeta->add($quad);
+                return null;
             }
-        }
-        foreach ($oldMeta->allResources($schema->id) as $id) {
-            $id = (string) $id;
-            if (!in_array($id, $idSkip) && !str_starts_with($id, $repoIdNmsp)) {
-                $newMeta->addResource($schema->id, $id);
-                $oldMeta->deleteResource($schema->id, $id);
-            }
-        }
-        $oldMeta->deleteResource($schema->parent);
+            return $quad;
+        };
+        $oldMeta->forEach($clbck, new PT($schema->id));
+        $oldMeta->delete(new PT($schema->parent));
         // there is at least one non-internal id required; as all are being passed to the new resource, let's create a dummy one
-        $oldMeta->addResource($schema->id, $schema->namespaces->vid . UUID::v4());
+        $oldMeta->add(DF::quadNoSubject($schema->id, DF::namedNode($schema->namespaces->vid . UUID::v4())));
 
         $this->meta = $newMeta;
         $oldRepoRes = $this->repoRes;
@@ -269,11 +274,7 @@ class File {
      */
     private function getIds(): array {
         $idProp = $this->repo->getSchema()->id;
-        $ids    = [];
-        foreach ($this->meta->allResources($idProp) as $id) {
-            $ids[] = (string) $id;
-        }
-        return $ids;
+        return $this->meta->listObjects(new PT($idProp))->getValues();
     }
 
     private function withinSizeLimit(): bool {
@@ -287,13 +288,9 @@ class File {
      */
     private function assureLabel(): void {
         $labelProp = $this->repo->getSchema()->label;
-
-        $addLabel = true;
-        if (isset($this->repoRes)) {
-            $addLabel = $this->repoRes->getMetadata()->get($labelProp) === null;
-        }
+        $addLabel  = !isset($this->repoRes) || $this->repoRes->getMetadata()->none(new PT($labelProp));
         if ($addLabel) {
-            $this->meta->addLiteral($labelProp, $this->info->getFilename(), 'und');
+            $this->meta->add(DF::quadNoSubject($labelProp, DF::literal($this->info->getFilename(), 'und')));
         }
     }
 }
