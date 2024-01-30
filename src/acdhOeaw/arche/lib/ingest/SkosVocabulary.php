@@ -31,21 +31,16 @@ use RuntimeException;
 use GuzzleHttp\Client;
 use GuzzleHttp\Psr7\Request;
 use GuzzleHttp\Promise\RejectedPromise;
-use GuzzleHttp\Exception\ClientException;
 use zozlak\RdfConstants as RDF;
 use rdfInterface\LiteralInterface;
 use rdfInterface\NamedNodeInterface;
 use rdfInterface\QuadInterface;
 use rdfInterface\TermInterface;
-use quickRdf\Dataset;
-use quickRdf\DatasetNode;
 use quickRdf\DataFactory as DF;
 use termTemplates\QuadTemplate as QT;
 use termTemplates\PredicateTemplate as PT;
-use termTemplates\ValueTemplate as VT;
 use termTemplates\NamedNodeTemplate;
 use termTemplates\AnyOfTemplate;
-use termTemplates\NotTemplate;
 use acdhOeaw\arche\lib\Repo;
 use acdhOeaw\arche\lib\SearchConfig;
 use acdhOeaw\arche\lib\SearchTerm;
@@ -532,7 +527,7 @@ class SkosVocabulary extends MetadataCollection {
      */
     private function assureTitles(array $entities): void {
         echo self::$debug ? "Processing titles...\n" : "";
-        $titleTmpl      = new AnyOfTemplate(array_map(fn($x) => DF::namedNode($x), $this->titleProperties));
+        $titleTmpl = new AnyOfTemplate(array_map(fn($x) => DF::namedNode($x), $this->titleProperties));
         $titleProp = $this->repo->getSchema()->label;
         foreach ($entities as $sbj) {
             if ($this->any(new QT($sbj, $titleProp))) {
@@ -636,10 +631,10 @@ class SkosVocabulary extends MetadataCollection {
         $valid = [];
         $queue = $entities;
         while (count($queue) > 0) {
-            $sbj   = array_pop($queue);
-            if (!isset($valid[(string)$sbj])) {
-                $valid[(string)$sbj] = $sbj;
-                $queue = array_merge(
+            $sbj = array_pop($queue);
+            if (!isset($valid[(string) $sbj])) {
+                $valid[(string) $sbj] = $sbj;
+                $queue               = array_merge(
                     $queue,
                     iterator_to_array($this->listObjects(new QT($sbj, null, new NamedNodeTemplate(null, NamedNodeTemplate::ANY))))
                 );
@@ -666,6 +661,7 @@ class SkosVocabulary extends MetadataCollection {
                 }
             }
         }
+        array_shift($mergedStr); // remove the $into
 
         foreach ($mergedStr as $sbj) {
             $sbj = DF::namedNode($sbj);
