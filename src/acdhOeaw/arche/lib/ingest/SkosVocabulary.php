@@ -527,19 +527,28 @@ class SkosVocabulary extends MetadataCollection {
      */
     private function assureTitles(array $entities): void {
         echo self::$debug ? "Processing titles...\n" : "";
-        $titleTmpl = new AnyOfTemplate(array_map(fn($x) => DF::namedNode($x), $this->titleProperties));
-        $titleProp = $this->repo->getSchema()->label;
+        $titleSrcProps = array_map(fn($x) => DF::namedNode($x), $this->titleProperties);
+        $titleProp     = $this->repo->getSchema()->label;
         foreach ($entities as $sbj) {
             if ($this->any(new QT($sbj, $titleProp))) {
                 continue;
             }
-            $obj = $this->getObject(new QT($sbj, $titleTmpl));
-            $obj ??= DF::literal((string) $sbj, 'und');
-            if (!($obj instanceof LiteralInterface)) {
-                $obj = DF::literal((string) $obj, 'und');
+            foreach ($titleSrcProps as $i) {
+                $objs = iterator_to_array($this->listObjects(new QT($sbj, $i)));
+                if (count($objs) > 0) {
+                    break;
+                }
             }
-            echo self::$debug > 1 ? "\tadding <$sbj> '$obj'@" . $obj->getLang() . "\n" : '';
-            $this->add(DF::quad($sbj, $titleProp, $obj));
+            if (count($objs) === 0) {
+                $objs = [DF::literal((string) $sbj, 'und')];
+            }
+            foreach ($objs as $i) {
+                if (!($i instanceof LiteralInterface)) {
+                    $i = DF::literal((string) $i, 'und');
+                }
+                echo self::$debug > 1 ? "\tadding <$sbj> '$i'@" . $i->getLang() . "\n" : '';
+                $this->add(DF::quad($sbj, $titleProp, $i));
+            }
         }
     }
 
@@ -634,7 +643,7 @@ class SkosVocabulary extends MetadataCollection {
             $sbj = array_pop($queue);
             if (!isset($valid[(string) $sbj])) {
                 $valid[(string) $sbj] = $sbj;
-                $queue               = array_merge(
+                $queue                = array_merge(
                     $queue,
                     iterator_to_array($this->listObjects(new QT($sbj, null, new NamedNodeTemplate(null, NamedNodeTemplate::ANY))))
                 );
