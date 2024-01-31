@@ -539,7 +539,7 @@ class SkosVocabulary extends MetadataCollection {
                     break;
                 }
             }
-            if (count($objs) === 0) {
+            if (count($objs ?? []) === 0) {
                 $objs = [DF::literal((string) $sbj, 'und')];
             }
             foreach ($objs as $i) {
