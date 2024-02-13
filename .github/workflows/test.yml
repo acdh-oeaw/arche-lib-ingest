@@ -46,5 +46,6 @@ jobs:
       run: |
         export COVERALLS_RUN_LOCALLY=1
         export COVERALLS_REPO_TOKEN=${{ secrets.coverallsToken }}
-        composer require -W php-coveralls/php-coveralls
+        rm -fR vendor composer.lock
+        composer require php-coveralls/php-coveralls
         php vendor/bin/php-coveralls -v
