@@ -14,12 +14,9 @@
         "php": ">=8 <8.3",
         "ext-iconv": "*",
         "guzzlehttp/guzzle": "^7",
-        "acdh-oeaw/arche-lib": "^6.0.0-RC1",
-        "acdh-oeaw/uri-normalizer": "^3.0.0-RC1",
-        "zozlak/rdf-constants": "^1.2.1",
-        "sweetrdf/rdf-interface": "^2.0.0-RC7",
-        "sweetrdf/quick-rdf": "^2.0.0-RC7",
-        "sweetrdf/rdf-helpers": "^2.0.0-RC1"
+        "acdh-oeaw/arche-lib": "^6",
+        "acdh-oeaw/uri-normalizer": "^3",
+        "zozlak/rdf-constants": "^1.2.1"
     },
     "autoload": {
         "psr-4": {
