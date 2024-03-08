@@ -591,7 +591,7 @@ class Indexer {
             $toAdd[] = DF::quadNoSubject($schema->parent, $this->parent->getUri());
         }
         if ($dir !== $this->directory && !$this->flatStructure) {
-            $toAdd[] = DF::quadNoSubject($schema->parent, DF::literal(substr($id, 0, strrpos($id, '/') ?: null)));
+            $toAdd[] = DF::quadNoSubject($schema->parent, DF::namedNode(substr($id, 0, strrpos($id, '/') ?: null)));
         }
         // mime type and binary size
         if ($file->isFile()) {
