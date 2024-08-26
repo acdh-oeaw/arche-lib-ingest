@@ -5,8 +5,18 @@ on: push
 jobs:
   phpunit:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        php: [8.1, 8.2, 8.3, 8.4]
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v4
+    - uses: shivammathur/setup-php@v2
+      with:
+        php-version: ${{ matrix.php }}
+        extensions: gd,json,mbstring,pcre,xmlreader,yaml
+        coverage: xdebug
+      env:
+        fail-fast: true
     - name: clone repo config
       run: |
         git clone --depth 1 --branch arche https://github.com/acdh-oeaw/arche-docker-config.git config
