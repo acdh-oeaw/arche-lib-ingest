@@ -312,7 +312,7 @@ class MetadataCollection extends Dataset {
             $sleep        = false;
             foreach ($chunkRepoRes as $n => $j) {
                 // handle reingestion on "HTTP 409 Conflict"
-                $conflict     = $j instanceof Conflict && preg_match('/Resource [0-9]+ locked|Transaction [0-9]+ locked|Owned by other request|Lock not available/', $j->getMessage());
+                $conflict     = $j instanceof Conflict && preg_match('/Resource [0-9]+ locked|Transaction [0-9]+ locked|Owned by other request|Lock not available|deadlock detected/', $j->getMessage());
                 $notFound     = $j instanceof NotFound;
                 $networkError = $j instanceof ConnectException;
                 if ($conflict || $notFound || $networkError) {
