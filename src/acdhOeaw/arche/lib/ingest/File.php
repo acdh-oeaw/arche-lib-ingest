@@ -211,7 +211,7 @@ class File {
             return $quad;
         };
         $oldMeta->forEach($clbck, new PT($schema->id));
-        $oldMeta->delete(new PT($schema->parent));
+        #$oldMeta->delete(new PT($schema->parent));
         // there is at least one non-internal id required; as all are being passed to the new resource, let's create a dummy one
         $oldMeta->add(DF::quadNoSubject($schema->id, DF::namedNode($schema->namespaces->vid . UUID::v4())));
 
