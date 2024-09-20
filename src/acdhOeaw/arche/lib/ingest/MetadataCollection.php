@@ -332,6 +332,10 @@ class MetadataCollection extends Dataset {
                         $msg    = $chunk[$n] . ": " . $msg . "(" . get_class($j) . ")";
                         $errors .= "\t$msg\n";
                         echo self::$debug ? "\tERROR while processing $msg\n" : '';
+                        // terminal errors: transaction doesn't exist, database max connections reached
+                        if (preg_match("/Transaction [0-9]+ doesn't exist|SQLSTATE\[08006\]/", $msg)) {
+                            break 2;
+                        }
                     }
                     if ($j instanceof RepoResource || $errorMode === self::ERRMODE_INCLUDE) {
                         $allRepoRes[] = $j;

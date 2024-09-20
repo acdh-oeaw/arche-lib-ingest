@@ -162,9 +162,14 @@ class File {
                 $newVersion = $locModDate > $modDate;
                 break;
             case Indexer::VERSIONING_DIGEST:
-                $hash       = explode(':', (string) $oldMeta->getObject(new PT($schema->hash)));
-                $locHash    = $this->getHash($hash[0]);
-                $newVersion = $hash[1] !== $locHash;
+                $hash       = (string) $oldMeta->getObject(new PT($schema->hash));
+                if (empty($hash)) {
+                    $newVersion = false;
+                } else {
+                    $hash       = explode(':', $hash);
+                    $locHash    = $this->getHash($hash[0]);
+                    $newVersion = $hash[1] !== $locHash;
+                }
                 break;
             case Indexer::VERSIONING_ALWAYS:
                 $newVersion = true;
@@ -178,7 +183,7 @@ class File {
 
         // progress meter
         $upload = $this->withinSizeLimit() ? '+ upload ' : '';
-        echo ProgressMeter::format($this->meterId, $this->n, "Processing " . $this->info->getPathname() . " ({n}/{t} {p}%): new version $upload pidPass ".(int)$this->pidPass."\n");
+        echo ProgressMeter::format($this->meterId, $this->n, "Processing " . $this->info->getPathname() . " ({n}/{t} {p}%): new version $upload pidPass " . (int) $this->pidPass . "\n");
 
         // create the new version
         $repoIdNmsp = $this->repo->getBaseUrl();
