@@ -233,9 +233,15 @@ class File {
 
         if ($binary !== null) {
             $promise = $this->repoRes->updateContentAsync($binary);
-            $promise = $promise->then(function () {
-                $this->repoRes->setMetadata($this->meta);
-                return $this->repoRes->updateMetadataAsync(RepoResource::UPDATE_MERGE, RepoResource::META_RESOURCE);
+            $promise = $promise->then(function ($x) {
+                // update the metadata only if it provides any new information
+                $localMeta = $this->meta->map(fn(QuadInterface $q) => $q->withSubject($this->repoRes->getUri()));
+                if (count($localMeta->copyExcept($this->repoRes->getGraph())) === 0) {
+                    return true;
+                } else {
+                    $this->repoRes->setMetadata($this->meta);
+                    return $this->repoRes->updateMetadataAsync(RepoResource::UPDATE_MERGE, RepoResource::META_RESOURCE);
+                }
             });
         } else {
             $this->repoRes->setMetadata($this->meta);
