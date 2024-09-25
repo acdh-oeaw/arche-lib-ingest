@@ -57,12 +57,13 @@ use acdhOeaw\UriNormalizer;
  */
 class MetadataCollection extends Dataset {
 
-    const SKIP               = 1;
-    const CREATE             = 2;
-    const ERRMODE_FAIL       = 'fail';
-    const ERRMODE_PASS       = 'pass';
-    const ERRMODE_INCLUDE    = 'include';
-    const NETWORKERROR_SLEEP = 3;
+    const SKIP                           = 1;
+    const CREATE                         = 2;
+    const ERRMODE_FAIL                   = 'fail';
+    const ERRMODE_PASS                   = 'pass';
+    const ERRMODE_INCLUDE                = 'include';
+    const NETWORKERROR_SLEEP             = 3;
+    const ALLOWED_CONFLICT_REASONS_REGEX = '/Resource [0-9]+ locked|Transaction [0-9]+ locked|Owned by other request|Lock not available|duplicate key value|deadlock detected/';
 
     /**
      * Turns debug messages on.
@@ -312,7 +313,7 @@ class MetadataCollection extends Dataset {
             $sleep        = false;
             foreach ($chunkRepoRes as $n => $j) {
                 // handle reingestion on "HTTP 409 Conflict"
-                $conflict     = $j instanceof Conflict && preg_match('/Resource [0-9]+ locked|Transaction [0-9]+ locked|Owned by other request|Lock not available|deadlock detected/', $j->getMessage());
+                $conflict     = $j instanceof Conflict && preg_match(self::ALLOWED_CONFLICT_REASONS_REGEX, $j->getMessage());
                 $notFound     = $j instanceof NotFound;
                 $networkError = $j instanceof ConnectException;
                 if ($conflict || $notFound || $networkError) {
@@ -376,9 +377,9 @@ class MetadataCollection extends Dataset {
             // or (at lest one) non-ID property
             $validTmp = new SplObjectStorage();
             foreach ($this->getIterator(new QT($nnTmpl)) as $quad) {
-                $sbj      = $quad->getSubject();
-                $nonIdCond   = !$idProp->equals($quad->getPredicate());
-                $nmspCond = $idProp && str_starts_with((string) $quad->getObject(), $namespace);
+                $sbj       = $quad->getSubject();
+                $nonIdCond = !$idProp->equals($quad->getPredicate());
+                $nmspCond  = $idProp && str_starts_with((string) $quad->getObject(), $namespace);
                 if ($nonIdCond || $nmspCond) {
                     $validTmp->attach($sbj);
                 }

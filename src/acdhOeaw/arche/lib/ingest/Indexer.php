@@ -494,7 +494,7 @@ class Indexer {
                     continue;
                 }
                 // handle reingestion on "HTTP 409 Conflict"
-                $isConflict     = $j instanceof Conflict && preg_match('/Resource [0-9]+ locked|Transaction [0-9]+ locked|Owned by other request|Lock not available|duplicate key value/', $j->getMessage());
+                $isConflict     = $j instanceof Conflict && preg_match(MetadataCollection::ALLOWED_CONFLICT_REASONS_REGEX, $j->getMessage());
                 $isNetworkError = $j instanceof ConnectException;
                 if (($isConflict || $isNetworkError) && $chunk[$n]->getUploadsCount() <= $retries + 1) {
                     $filesToImport[] = $chunk[$n];
