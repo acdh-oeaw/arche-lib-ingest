@@ -51,7 +51,7 @@ jobs:
     - name: test
       run: |
         mkdir -p build/logs
-        XDEBUG_MODE=coverage ./vendor/bin/phpunit
+        XDEBUG_MODE=coverage ./vendor/bin/phpunit --display-deprecations --display-phpunit-deprecations --display-notices --display-warnings
     - name: coveralls
       run: |
         export COVERALLS_RUN_LOCALLY=1
