@@ -59,3 +59,20 @@ jobs:
         rm -fR composer.json composer.lock vendor
         composer require php-coveralls/php-coveralls
         php vendor/bin/php-coveralls -v
+  phpstan:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: shivammathur/setup-php@v2
+      with:
+        php-version: 8.4
+    - uses: actions/cache@v4
+      with:
+        path: vendor
+        key: ${{ runner.os }}-composer-${{ hashFiles('**/composer.lock') }}
+        restore-keys: ${{ runner.os }}-composer-
+    - name: composer
+      run: composer update
+    - name: phpstan
+      run: vendor/bin/phpstan analyse -l 8 src tests || true
+
