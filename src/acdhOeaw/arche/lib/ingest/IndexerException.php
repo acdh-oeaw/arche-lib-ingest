@@ -50,11 +50,11 @@ class IndexerException extends Exception {
      * Creates the exception
      * @param string $message exception message
      * @param int $code exception code
-     * @param Throwable $previous original exception
+     * @param Throwable|null $previous original exception
      * @param array<RepoResource> $resources collection of already commited resources
      */
     public function __construct(string $message = "", int $code = 0,
-                                Throwable $previous = null,
+                                ?Throwable $previous = null,
                                 array $resources = []) {
         parent::__construct($message, $code, $previous);
         $this->resources = $resources;
