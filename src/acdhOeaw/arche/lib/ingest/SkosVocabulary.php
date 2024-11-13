@@ -409,7 +409,7 @@ class SkosVocabulary extends MetadataCollection {
         $this->assureTitles($entitiesCollections);
         $this->dropProperties($entitiesCollections);
         $this->assureLiterals($entitiesCollections);
-        $this->assureParents($entitiesCollections);
+        $this->assureParents(array_diff($entitiesCollections. [$this->vocabularyUrl]));
         $this->dropNodes($entitiesCollections);
         parent::preprocess();
 
