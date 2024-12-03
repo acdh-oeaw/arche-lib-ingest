@@ -56,6 +56,6 @@ class ProgressMeter {
             return '';
         }
         $N = self::$counters[$id][1];
-        return str_replace(['{n}', '{t}', '{p}'], [$n, $N, round(100 * $n / $N)], $format);
+        return str_replace(['{n}', '{t}', '{p}'], [(string) $n, (string) $N, (string) round(100 * $n / $N)], $format);
     }
 }

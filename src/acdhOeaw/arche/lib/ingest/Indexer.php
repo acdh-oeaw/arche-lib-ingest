@@ -232,7 +232,9 @@ class Indexer {
         }
 
         $this->schema          = $this->repo->getSchema();
+        /** @phpstan-ignore property.notFound */
         $this->binaryClass     = DF::namedNode($this->schema->ingest->defaultBinaryClass);
+        /** @phpstan-ignore property.notFound */
         $this->collectionClass = DF::namedNode($this->schema->ingest->defaultCollectionClass);
         $this->uriNorm         = new UriNormalizer(null, $this->schema->id);
         $this->metaLookup      = new MetaLookupConstant(new DatasetNode(DF::namedNode('.')));

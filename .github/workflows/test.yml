@@ -31,6 +31,9 @@ jobs:
     - name: composer update
       run: |
         composer update
+    - name: phpstan
+      run: |
+        phpstan analyze -l 6 src
     - name: fetch bigger data
       run: |
         curl https://zozlak.org/schnitzler-data.tgz > tests/data/schnitzler-data.tgz

@@ -56,7 +56,7 @@ class File {
     private SplFileInfo $info;
     private DatasetNodeInterface $meta;
     private Repo $repo;
-    private ?int $n;
+    private ?int $n = null;
     private int $sizeLimit;
     private int $skipMode;
     private int $versioning;

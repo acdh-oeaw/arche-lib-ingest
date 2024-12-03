@@ -16,7 +16,8 @@
         "guzzlehttp/guzzle": "^7",
         "acdh-oeaw/arche-lib": "^7",
         "acdh-oeaw/uri-normalizer": "^3",
-        "zozlak/rdf-constants": "^1.2.1"
+        "zozlak/rdf-constants": "^1.2.1",
+        "kbsali/redmine-api": "^2.7"
     },
     "autoload": {
         "psr-4": {

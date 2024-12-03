@@ -29,6 +29,7 @@ namespace acdhOeaw\arche\lib\ingest;
 use BadMethodCallException;
 use RuntimeException;
 use GuzzleHttp\Client;
+use GuzzleHttp\Exception\ClientException;
 use GuzzleHttp\Psr7\Request;
 use GuzzleHttp\Promise\RejectedPromise;
 use zozlak\RdfConstants as RDF;
@@ -111,7 +112,7 @@ class SkosVocabulary extends MetadataCollection {
         $headers = ['Accept' => 'text/turtle;q=1, application/rdf+xml;q=0.8, application/n-triples;q=0.6, application/ld+json;q=0.4'];
         $resp    = $client->send(new Request('get', $url, $headers));
         $format  = $resp->getHeader('Content-Type')[0] ?? '';
-        $format  = explode(';', $format)[0] ?? null;
+        $format  = explode(';', $format)[0];
         file_put_contents($tmpFile, (string) $resp->getBody());
         try {
             return new self($repo, $tmpFile, $format, $url);
@@ -200,7 +201,11 @@ class SkosVocabulary extends MetadataCollection {
         if (count($schemas) > 1) {
             throw new RuntimeException("Many skos:ConceptSchema found in the RDF graph");
         }
-        $this->vocabularyUrl = current($schemas);
+        $url = current($schemas);
+        if (!($url instanceof NamedNodeInterface)) {
+            throw new RuntimeException("Schema URL is not a named node");
+        }
+        $this->vocabularyUrl = $url;
         if (!empty($uri)) {
             $this->add(DF::quad($this->vocabularyUrl, $schema->id, DF::namedNode($uri)));
         }
@@ -210,7 +215,7 @@ class SkosVocabulary extends MetadataCollection {
         try {
             $repoRes     = $this->repo->getResourceById($this->vocabularyUrl);
             $repoRes->loadMetadata(false, RRI::META_RESOURCE, null, [$schema->hash]);
-            list($hashName, $repoResHash) = explode(':', (string) ($repoRes->getGraph()->getObject(new PT($schema->hash) ?? 'sha1:')));
+            list($hashName, $repoResHash) = explode(':', (string) ($repoRes->getGraph()->getObject(new PT($schema->hash)) ?? 'sha1:'));
             $hash        = hash_init($hashName);
             hash_update_file($hash, $file);
             $hash        = hash_final($hash, false);
