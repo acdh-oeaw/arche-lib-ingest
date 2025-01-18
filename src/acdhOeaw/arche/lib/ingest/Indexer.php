@@ -519,6 +519,10 @@ class Indexer {
             if ($sleep) {
                 sleep(self::NETWORKERROR_SLEEP);
             }
+            if ($concurrency > 2) {
+                // if another attempt is needed, gradually reduce the concurrency
+                $concurrency = $concurrency >> 1;
+            }
         }
         if (!empty($errors) && $errorMode === self::ERRMODE_PASS) {
             throw new IndexerException("There was at least one error during the import:\n.$errors", IndexerException::ERROR_DURING_IMPORT, null, $commitedRepoRes);
