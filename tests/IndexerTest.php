@@ -397,7 +397,7 @@ class IndexerTest extends TestBase {
         $this->ind->setFlatStructure(true);
         $this->ind->setMetaLookup(new MetaLookupConstant($meta));
         self::$repo->begin();
-        $indRes = $this->ind->import(Indexer::ERRMODE_FAIL);
+        $indRes = $this->ind->import(Indexer::ERRMODE_FAIL, 10, 20);
         $this->noteResources($indRes);
         self::$repo->commit();
         $this->assertEquals(5, count($indRes));
@@ -420,7 +420,7 @@ class IndexerTest extends TestBase {
         $this->ind->setMetaLookup(new MetaLookupConstant($meta));
         self::$repo->begin();
         try {
-            $indRes = $this->ind->import(Indexer::ERRMODE_FAIL, 3, 0);
+            $indRes = $this->ind->import(Indexer::ERRMODE_FAIL, 10, 0);
             $this->noteResources($indRes);
             $this->assertTrue(false);
         } catch (IndexerException $e) {
