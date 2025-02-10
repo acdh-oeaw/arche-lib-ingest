@@ -27,15 +27,20 @@
 namespace acdhOeaw\arche\lib\ingest\tests;
 
 use zozlak\RdfConstants as RDF;
+use rdfInterface\QuadInterface;
+use rdfInterface\DatasetInterface;
+use rdfInterface\DatasetNodeInterface;
 use quickRdf\DataFactory as DF;
 use quickRdf\Dataset;
 use quickRdf\DatasetNode;
+use termTemplates\AnyOfTemplate;
 use termTemplates\PredicateTemplate as PT;
 use termTemplates\LiteralTemplate;
 use quickRdfIo\Util as RdfIoUtil;
 use GuzzleHttp\Psr7\Request;
 use GuzzleHttp\Exception\ClientException;
 use acdhOeaw\arche\lib\RepoResource;
+use acdhOeaw\arche\lib\Schema;
 use acdhOeaw\arche\lib\exception\NotFound;
 use acdhOeaw\arche\lib\exception\Conflict;
 use acdhOeaw\arche\lib\ingest\Indexer;
@@ -43,6 +48,7 @@ use acdhOeaw\arche\lib\ingest\IndexerException;
 use acdhOeaw\arche\lib\ingest\metaLookup\MetaLookupFile;
 use acdhOeaw\arche\lib\ingest\metaLookup\MetaLookupGraph;
 use acdhOeaw\arche\lib\ingest\metaLookup\MetaLookupConstant;
+use acdhOeaw\arche\lib\ingest\util\UUID;
 
 /**
  * Description of IndexerTest
@@ -450,6 +456,31 @@ class IndexerTest extends TestBase {
     public function testNewVersionCreation(): void {
         self::$test = 'testNewVersionCreation';
 
+        $verMetaFn = function (DatasetNodeInterface $oldMeta, Schema $schema): array {
+            $repoIdNmsp = preg_replace('`/[0-9]+$`', '', (string) $oldMeta->getNode());
+            $skipProp   = [$schema->id, $schema->pid];
+
+            $newMeta = $oldMeta->copyExcept(new PT(new AnyOfTemplate($skipProp)));
+            $newMeta->add(DF::quadNoSubject($schema->isNewVersionOf, $oldMeta->getNode()));
+            $clbck   = function (QuadInterface $quad, DatasetInterface $ds) use ($newMeta,
+                                                                                 $repoIdNmsp,
+                                                                                 $schema) {
+                $id = (string) $quad->getObject();
+                if (!str_starts_with($id, $repoIdNmsp) && $ds->none($quad->withPredicate($schema->pid))) {
+                    $newMeta->add($quad);
+                    return null;
+                }
+                return $quad;
+            };
+            $oldMeta->forEach($clbck, new PT($schema->id));
+            // so we don't end up with multiple versions of same filename in one collection
+            $oldMeta->delete(new PT($schema->parent));
+            // there is at least one non-internal id required; as all are being passed to the new resource, let's create a dummy one
+            $oldMeta->add(DF::quadNoSubject($schema->id, DF::namedNode($schema->namespaces->vid . UUID::v4())));
+
+            return [$oldMeta, $newMeta];
+        };
+
         $schema  = self::$repo->getSchema();
         $pidProp = $schema->ingest->pid;
         $pidTmpl = new PT($pidProp);
@@ -472,7 +503,7 @@ class IndexerTest extends TestBase {
         file_put_contents(__DIR__ . '/data/sample.xml', random_int(0, 123456));
 
         self::$repo->begin();
-        $this->ind->setVersioning(Indexer::VERSIONING_DIGEST, Indexer::PID_PASS);
+        $this->ind->setVersioning(Indexer::VERSIONING_DIGEST, $verMetaFn);
         $indRes2 = $this->ind->import();
         $this->noteResources($indRes2);
         self::$repo->commit();
@@ -480,29 +511,16 @@ class IndexerTest extends TestBase {
         $this->assertEquals(1, count($indRes2));
         $newRes    = array_pop($indRes2);
         $meta      = $newRes->getMetadata();
-        $this->assertEquals($pid, (string) $meta->getObject($pidTmpl)); // PID copied to the new resource - depends on the repo recognizing pid property as a non-relation one
-        $this->assertTrue(in_array($pid, $newRes->getIds())); // depends on PID being copied to id (which is NOT the default repository setup cause the repository doesn't know the PID concept)
+        $this->assertEmpty($meta->getObject($pidTmpl)); // PID not copied to the new resource - depends on the repo recognizing pid property as a non-relation one
+        $this->assertFalse(in_array($pid, $newRes->getIds()));
         $prevResId = (string) $meta->getObject(new PT($schema->isNewVersionOf));
         $this->assertTrue(!empty($prevResId));
         $prevRes   = self::$repo->getResourceById($prevResId);
         $prevMeta  = $prevRes->getMetadata();
-        $this->assertNull($prevMeta->getObject($pidTmpl)); // PID not present in the old resource
+        $this->assertEquals($pid, (string) $prevMeta->getObject($pidTmpl)); // PID present in the old resource
+        $this->assertTrue(in_array($pid, $prevRes->getIds()));
 
         file_put_contents(__DIR__ . '/data/sample.xml', random_int(0, 123456));
-
-        self::$repo->begin();
-        $this->ind->setVersioning(Indexer::VERSIONING_DIGEST, Indexer::PID_KEEP);
-        $indRes3 = $this->ind->import();
-        $this->noteResources($indRes3);
-        self::$repo->commit();
-
-        $this->assertEquals(1, count($indRes3));
-        $newestRes  = array_pop($indRes3);
-        $newestMeta = $newestRes->getMetadata();
-        $this->assertNull($newestMeta->getObject($pidTmpl));
-        $newMeta    = $newRes->getMetadata();
-        $this->assertEquals($pid, (string) $newMeta->getObject($pidTmpl));
-        $this->assertTrue(in_array($pid, $newRes->getIds()));
     }
 
     /**

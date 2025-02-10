@@ -30,20 +30,16 @@ use DateTime;
 use RuntimeException;
 use SplFileInfo;
 use GuzzleHttp\Promise\PromiseInterface;
-use rdfInterface\DatasetInterface;
 use rdfInterface\DatasetNodeInterface;
 use rdfInterface\QuadInterface;
 use quickRdf\DataFactory as DF;
-use termTemplates\QuadTemplate as QT;
 use termTemplates\PredicateTemplate as PT;
-use termTemplates\AnyOfTemplate;
 use acdhOeaw\arche\lib\BinaryPayload;
 use acdhOeaw\arche\lib\Repo;
 use acdhOeaw\arche\lib\RepoResource;
 use acdhOeaw\arche\lib\exception\NotFound;
 use acdhOeaw\arche\lib\ingest\SkippedException;
 use acdhOeaw\arche\lib\ingest\util\ProgressMeter;
-use acdhOeaw\arche\lib\ingest\util\UUID;
 use acdhOeaw\arche\lib\promise\RepoResourcePromise;
 
 /**
@@ -60,7 +56,15 @@ class File {
     private int $sizeLimit;
     private int $skipMode;
     private int $versioning;
-    private bool $pidPass;
+
+    /**
+     * A callable with signature
+     * `function(\rdfInterface\DatasetNodeInterface $resourceMeta, \acdhOeaw\arche\lib\Schema $repositoryMetaSchema): array{0: \rdfInterface\DatasetNodeInterface $oldVersionMeta, 1: \rdfInterface\DatasetNodeInterface $newVersionMeta}
+     * generating new and old version metadata based on the current version metadata
+     * 
+     * @var callable $versioningMetaFunc
+     */
+    private $versioningMetaFunc;
     private ?string $meterId;
     private RepoResource $repoRes;
     private int $uploadsCount = 0;
@@ -78,14 +82,18 @@ class File {
      * @param int $sizeLimit
      * @param int $skipMode
      * @param int $versioning
+     * @param callable $versioningMetaFunc a callable with signature
+     *   `function(\rdfInterface\DatasetNodeInterface $resourceMeta): array{0: \rdfInterface\DatasetNodeInterface $oldVersionMeta, 1: \rdfInterface\DatasetNodeInterface $newVersionMeta}
+     *   generating new and old version metadata based on the current version metadata
      * @param string|null $meterId
      * @return RepoResource | SkippedException
      */
     public function upload(int $sizeLimit = -1,
                            int $skipMode = Indexer::SKIP_NONE,
                            int $versioning = Indexer::VERSIONING_NONE,
-                           bool $pidPass = false, ?string $meterId = null): RepoResource | SkippedException {
-        return $this->uploadAsync($sizeLimit, $skipMode, $versioning, $pidPass, $meterId = null)->wait();
+                           ?callable $versioningMetaFunc = null,
+                           ?string $meterId = null): RepoResource | SkippedException {
+        return $this->uploadAsync($sizeLimit, $skipMode, $versioning, $versioningMetaFunc, $meterId = null)->wait();
     }
 
     /**
@@ -98,6 +106,9 @@ class File {
      * @param int $versioning versioning mode - one of Indexer::VERSIONING_NONE,
      *   Indexer::VERSIONING_DATE, Indexer::VERSIONING_DIGEST, 
      *   Indexer::VERSIONING_ALWAYS
+     * @param callable $versioningMetaFunc a callable with signature
+     *   `function(\rdfInterface\DatasetNodeInterface $resourceMeta, \acdhOeaw\arche\lib\Schema $repositoryMetaSchema): array{0: \rdfInterface\DatasetNodeInterface $oldVersionMeta, 1: \rdfInterface\DatasetNodeInterface $newVersionMeta}
+     *   generating new and old version metadata based on the current version metadata
      * @param ?string $meterId identifier of the progress meter (if null, no
      *   progress information is displayed)
      * @return PromiseInterface
@@ -105,15 +116,21 @@ class File {
     public function uploadAsync(int $sizeLimit = -1,
                                 int $skipMode = Indexer::SKIP_NONE,
                                 int $versioning = Indexer::VERSIONING_NONE,
-                                bool $pidPass = false, ?string $meterId = null): PromiseInterface {
+                                ?callable $versioningMetaFunc = null,
+                                ?string $meterId = null): PromiseInterface {
         $this->uploadsCount++;
         // to make it easy to populate the whole required context trough promises
         $this->n          = ProgressMeter::increment($meterId);
         $this->sizeLimit  = $sizeLimit;
         $this->skipMode   = $skipMode;
         $this->versioning = $this->info->isDir() ? Indexer::VERSIONING_NONE : $versioning;
-        $this->pidPass    = $pidPass;
         $this->meterId    = $meterId;
+        if ($versioning !== Indexer::VERSIONING_NONE && $versioningMetaFunc === null) {
+            throw new IndexerException('$versioningMetaFunc has to be provided if an automatic versioning is used');
+        }
+        if ($versioningMetaFunc !== null) {
+            $this->versioningMetaFunc = $versioningMetaFunc;
+        }
 
         $promise = $this->repo->getResourceByIdsAsync($this->getIds());
         $promise = $promise->then(function (RepoResource $repoRes) {
@@ -150,8 +167,7 @@ class File {
     }
 
     private function versioningAsync(): RepoResourcePromise | RepoResource {
-        $schema  = $this->repo->getSchema();
-        $pidTmpl = new PT($schema->pid);
+        $schema = $this->repo->getSchema();
 
         // check if new version is needed
         $oldMeta = $this->repoRes->getMetadata();
@@ -183,38 +199,10 @@ class File {
 
         // progress meter
         $upload = $this->withinSizeLimit() ? '+ upload ' : '';
-        echo ProgressMeter::format($this->meterId, $this->n, "Processing " . $this->info->getPathname() . " ({n}/{t} {p}%): new version $upload pidPass " . (int) $this->pidPass . "\n");
+        echo ProgressMeter::format($this->meterId, $this->n, "Processing " . $this->info->getPathname() . " ({n}/{t} {p}%): new version $upload\n");
 
         // create the new version
-        $repoIdNmsp = $this->repo->getBaseUrl();
-        $skipProp   = [$schema->id];
-        if (!$this->pidPass) {
-            $skipProp[] = $schema->pid;
-        }
-
-        $newMeta = $oldMeta->copyExcept(new PT(new AnyOfTemplate($skipProp)));
-        $newMeta->add(DF::quadNoSubject($schema->isNewVersionOf, $this->repoRes->getUri()));
-        if ($this->pidPass) {
-            $oldMeta->delete($pidTmpl);
-        }
-
-        $pidPass = $this->pidPass;
-        $clbck   = function (QuadInterface $quad, DatasetInterface $ds) use ($newMeta,
-                                                                             $pidPass,
-                                                                             $repoIdNmsp,
-                                                                             $schema) {
-            $id = (string) $quad->getObject();
-            if (!str_starts_with($id, $repoIdNmsp) && ($pidPass || $ds->none($quad->withPredicate($schema->pid)))) {
-                $newMeta->add($quad);
-                return null;
-            }
-            return $quad;
-        };
-        $oldMeta->forEach($clbck, new PT($schema->id));
-        // so we don't end up with multiple resources of same filename in one collection
-        $oldMeta->delete(new PT($schema->parent));
-        // there is at least one non-internal id required; as all are being passed to the new resource, let's create a dummy one
-        $oldMeta->add(DF::quadNoSubject($schema->id, DF::namedNode($schema->namespaces->vid . UUID::v4())));
+        list($oldMeta, $newMeta) = ($this->versioningMetaFunc)($oldMeta, $this->repo->getSchema());
 
         $this->meta = $newMeta;
         $oldRepoRes = $this->repoRes;

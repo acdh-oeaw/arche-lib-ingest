@@ -66,8 +66,6 @@ class Indexer {
     const VERSIONING_ALWAYS  = 2;
     const VERSIONING_DIGEST  = 3;
     const VERSIONING_DATE    = 4;
-    const PID_KEEP           = 1;
-    const PID_PASS           = 2;
     const ERRMODE_FAIL       = 'fail';
     const ERRMODE_PASS       = 'pass';
     const ERRMODE_INCLUDE    = 'include';
@@ -165,10 +163,13 @@ class Indexer {
     private int $versioningMode = self::VERSIONING_NONE;
 
     /**
-     * Should PIDs (epic handles) be migrated to the new version of a resource
-     * during versioning.
+     * A callable with signature
+     * `function(\rdfInterface\DatasetNodeInterface $resourceMeta, \acdhOeaw\arche\lib\Schema $repositoryMetaSchema): array{0: \rdfInterface\DatasetNodeInterface $oldVersionMeta, 1: \rdfInterface\DatasetNodeInterface $newVersionMeta}
+     * generating new and old version metadata based on the current version metadata
+     * 
+     * @var callable|null $versioningMetaFunc
      */
-    private int $pidPass = self::PID_KEEP;
+    private $versioningMetaFunc = null;
 
     /**
      * An object providing metadata when given a resource file path
@@ -295,19 +296,20 @@ class Indexer {
      * @param int $versioningMode mode either Indexer::VERSIONING_NONE, 
      *   Indexer::VERSIONING_ALWAYS, Indexer::VERSIONING_CHECKSUM or 
      *   Indexer::VERSIONING_DATE
-     * @param int $migratePid should PIDs (epic handles) be migrated to the new
-     *   version - either Indexer::MIGRATE_NO or Indexer::MIGRATE_YES
+     * @param callable $versioningMetaFunc a callable with signature
+     *   `function(\rdfInterface\DatasetNodeInterface $resourceMeta, \acdhOeaw\arche\lib\Schema $repositoryMetaSchema): array{0: \rdfInterface\DatasetNodeInterface $oldVersionMeta, 1: \rdfInterface\DatasetNodeInterface $newVersionMeta}
+     *   generating new and old version metadata based on the current version metadata
      * @return Indexer
      * @throws BadMethodCallException
      */
     public function setVersioning(int $versioningMode,
-                                  int $migratePid = self::PID_KEEP): Indexer {
+                                  callable $versioningMetaFunc): Indexer {
         if (!in_array($versioningMode, [self::VERSIONING_NONE, self::VERSIONING_ALWAYS,
                 self::VERSIONING_DIGEST, self::VERSIONING_DATE])) {
             throw new BadMethodCallException('Wrong versioning mode');
         }
-        $this->versioningMode = $versioningMode;
-        $this->pidPass        = $migratePid;
+        $this->versioningMode     = $versioningMode;
+        $this->versioningMetaFunc = $versioningMetaFunc;
         return $this;
     }
 
@@ -460,7 +462,6 @@ class Indexer {
         if (!isset($this->repo)) {
             throw new IndexerException("Repository connection object isn't set. Call setRepo() or setParent() first or pass the Repo object to the constructor.");
         }
-        $pidPass = $this->pidPass === self::PID_PASS;
 
         if ($this->flatStructure && substr($this->idPrefix, -1) !== '/') {
             $this->idPrefix .= '/';
@@ -475,7 +476,7 @@ class Indexer {
         }
 
         // ingest
-        $f               = fn(File $file) => $file->uploadAsync($this->uploadSizeLimit, $this->skipMode, $this->versioningMode, $pidPass, $meterId);
+        $f               = fn(File $file) => $file->uploadAsync($this->uploadSizeLimit, $this->skipMode, $this->versioningMode, $this->versioningMetaFunc ?? null, $meterId);
         $allRepoRes      = [];
         $commitedRepoRes = [];
         $errors          = '';
