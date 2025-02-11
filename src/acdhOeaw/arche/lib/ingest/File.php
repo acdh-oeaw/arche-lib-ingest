@@ -170,7 +170,8 @@ class File {
         $schema = $this->repo->getSchema();
 
         // check if new version is needed
-        $oldMeta = $this->repoRes->getMetadata();
+        $skipUpload = true;
+        $oldMeta    = $this->repoRes->getMetadata();
         switch ($this->versioning) {
             case Indexer::VERSIONING_DATE:
                 $modDate    = (string) $oldMeta->getObject($schema->modificationDate);
@@ -181,6 +182,7 @@ class File {
                 $hash       = (string) $oldMeta->getObject(new PT($schema->hash));
                 if (empty($hash)) {
                     $newVersion = false;
+                    $skipUpload = false;
                 } else {
                     $hash       = explode(':', $hash);
                     $locHash    = $this->getHash($hash[0]);
@@ -194,12 +196,12 @@ class File {
                 throw new RuntimeException("Unknown versioning mode $this->versioning");
         }
         if (!$newVersion) {
-            return $this->updateAsync(true);
+            return $this->updateAsync($skipUpload);
         }
 
         // progress meter
         $upload = $this->withinSizeLimit() ? '+ upload ' : '';
-        echo ProgressMeter::format($this->meterId, $this->n, "Processing " . $this->info->getPathname() . " ({n}/{t} {p}%): new version $upload\n");
+        echo ProgressMeter::format($this->meterId, $this->n, "Processing " . $this->info->getPathname() . " ({n}/{t} {p}%): new version $upload " . $this->repoRes->getUri() . "\n");
 
         // create the new version
         list($oldMeta, $newMeta) = ($this->versioningMetaFunc)($oldMeta, $this->repo->getSchema());
