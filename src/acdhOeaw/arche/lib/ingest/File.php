@@ -72,12 +72,12 @@ class File {
      * fixing references to the old resource (or doing any other versioning-related
      * metadata processing which requires the new version resource to be already created)
      * 
-     * @var callable
+     * @var callable|null
      */
-    private $versioningRefFunc;
+    private $versioningRefFunc = null;
     private ?string $meterId;
     private RepoResource $repoRes;
-    private int $uploadsCount = 0;
+    private int $uploadsCount  = 0;
 
     public function __construct(SplFileInfo $fileInfo,
                                 DatasetNodeInterface $meta, Repo $repo) {
@@ -92,10 +92,10 @@ class File {
      * @param int $sizeLimit
      * @param int $skipMode
      * @param int $versioning
-     * @param callable $versioningMetaFunc a callable with signature
+     * @param callable|null $versioningMetaFunc a callable with signature
      *   `function(\rdfInterface\DatasetNodeInterface $resourceMeta): array{0: \rdfInterface\DatasetNodeInterface $oldVersionMeta, 1: \rdfInterface\DatasetNodeInterface $newVersionMeta}
      *   generating new and old version metadata based on the current version metadata
-     * @param callable $versioningRefFunc a callable with signature
+     * @param callable|null $versioningRefFunc a callable with signature
      *   `function(\acdhOeaw\arche\lib\RepoResource $old, \acdhOeaw\arche\lib\RepoResource $old $new): void
      *   fixing references to the old resource (or doing any other versioning-related
      *   metadata processing which requires the new version resource to be already created)
@@ -106,7 +106,7 @@ class File {
                            int $skipMode = Indexer::SKIP_NONE,
                            int $versioning = Indexer::VERSIONING_NONE,
                            ?callable $versioningMetaFunc = null,
-                           ?callabel $versioningRefFunc = null,
+                           ?callable $versioningRefFunc = null,
                            ?string $meterId = null): RepoResource | SkippedException {
         return $this->uploadAsync($sizeLimit, $skipMode, $versioning, $versioningMetaFunc, $versioningRefFunc, $meterId = null)->wait();
     }
@@ -239,7 +239,7 @@ class File {
         } else {
             $promise = new RepoResourcePromise($promise->then(fn() => $this->createAsync()));
         }
-        if (isset($this->versioningRefFunc)) {
+        if ($this->versioningRefFunc !== null) {
             $fn      = $this->versioningRefFunc;
             $promise = new RepoResourcePromise($promise->then(function (RepoResource $newRes) use ($oldRes,
                                                                                                    $fn) {
