@@ -484,12 +484,12 @@ class IndexerTest extends TestBase {
             $infoProp = DF::namedNode('https://vocabs.acdh.oeaw.ac.at/schema#hasVersionInfo');
 
             $meta = $old->getGraph();
-            $meta->add(DF::quadNoSubject($infoProp, "old resource info"));
+            $meta->add(DF::quadNoSubject($infoProp, DF::literal("old resource info")));
             $old->setGraph($meta);
             $old->updateMetadata(RepoResource::UPDATE_MERGE, RepoResource::META_NONE);
 
             $meta = $new->getGraph();
-            $meta->add(DF::quadNoSubject($infoProp, "new resource info"));
+            $meta->add(DF::quadNoSubject($infoProp, DF::literal("new resource info")));
             $new->setGraph($meta);
             $new->updateMetadata(RepoResource::UPDATE_MERGE, RepoResource::META_NONE);
         };
