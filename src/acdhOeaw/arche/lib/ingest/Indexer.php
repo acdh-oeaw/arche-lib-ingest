@@ -167,9 +167,19 @@ class Indexer {
      * `function(\rdfInterface\DatasetNodeInterface $resourceMeta, \acdhOeaw\arche\lib\Schema $repositoryMetaSchema): array{0: \rdfInterface\DatasetNodeInterface $oldVersionMeta, 1: \rdfInterface\DatasetNodeInterface $newVersionMeta}
      * generating new and old version metadata based on the current version metadata
      * 
-     * @var callable|null $versioningMetaFunc
+     * @var callable|null
      */
     private $versioningMetaFunc = null;
+
+    /**
+     * A callable with signature
+     * `function(\acdhOeaw\arche\lib\RepoResource $old, \acdhOeaw\arche\lib\RepoResource $old $new): void
+     * fixing references to the old resource (or doing any other versioning-related
+     * metadata processing which requires the new version resource to be already created)
+     * 
+     * @var callable|null
+     */
+    private $versioningRefFunc = null;
 
     /**
      * An object providing metadata when given a resource file path
@@ -299,17 +309,23 @@ class Indexer {
      * @param callable $versioningMetaFunc a callable with signature
      *   `function(\rdfInterface\DatasetNodeInterface $resourceMeta, \acdhOeaw\arche\lib\Schema $repositoryMetaSchema): array{0: \rdfInterface\DatasetNodeInterface $oldVersionMeta, 1: \rdfInterface\DatasetNodeInterface $newVersionMeta}
      *   generating new and old version metadata based on the current version metadata
+     * @param callable $versioningRefFunc a callable with signature
+     *   `function(\acdhOeaw\arche\lib\RepoResource $old, \acdhOeaw\arche\lib\RepoResource $old $new): void
+     *   fixing references to the old resource (or doing any other versioning-related
+     *   metadata processing which requires the new version resource to be already created)
      * @return Indexer
      * @throws BadMethodCallException
      */
     public function setVersioning(int $versioningMode,
-                                  callable $versioningMetaFunc): Indexer {
+                                  callable $versioningMetaFunc,
+                                  callable $versioningRefFunc): Indexer {
         if (!in_array($versioningMode, [self::VERSIONING_NONE, self::VERSIONING_ALWAYS,
                 self::VERSIONING_DIGEST, self::VERSIONING_DATE])) {
             throw new BadMethodCallException('Wrong versioning mode');
         }
         $this->versioningMode     = $versioningMode;
         $this->versioningMetaFunc = $versioningMetaFunc;
+        $this->versioningRefFunc  = $versioningRefFunc;
         return $this;
     }
 
@@ -476,7 +492,7 @@ class Indexer {
         }
 
         // ingest
-        $f               = fn(File $file) => $file->uploadAsync($this->uploadSizeLimit, $this->skipMode, $this->versioningMode, $this->versioningMetaFunc ?? null, $meterId);
+        $f               = fn(File $file) => $file->uploadAsync($this->uploadSizeLimit, $this->skipMode, $this->versioningMode, $this->versioningMetaFunc, $this->versioningRefFunc, $meterId);
         $allRepoRes      = [];
         $commitedRepoRes = [];
         $errors          = '';

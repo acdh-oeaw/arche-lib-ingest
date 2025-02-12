@@ -480,6 +480,19 @@ class IndexerTest extends TestBase {
 
             return [$oldMeta, $newMeta];
         };
+        $verRefFn = function (RepoResource $old, RepoResource $new): void {
+            $infoProp = DF::namedNode('https://vocabs.acdh.oeaw.ac.at/schema#hasVersionInfo');
+
+            $meta = $old->getGraph();
+            $meta->add(DF::quadNoSubject($infoProp, "old resource info"));
+            $old->setGraph($meta);
+            $old->updateMetadata(RepoResource::UPDATE_MERGE, RepoResource::META_NONE);
+
+            $meta = $new->getGraph();
+            $meta->add(DF::quadNoSubject($infoProp, "new resource info"));
+            $new->setGraph($meta);
+            $new->updateMetadata(RepoResource::UPDATE_MERGE, RepoResource::META_NONE);
+        };
 
         $schema  = self::$repo->getSchema();
         $pidProp = $schema->ingest->pid;
@@ -503,7 +516,7 @@ class IndexerTest extends TestBase {
         file_put_contents(__DIR__ . '/data/sample.xml', random_int(0, 123456));
 
         self::$repo->begin();
-        $this->ind->setVersioning(Indexer::VERSIONING_DIGEST, $verMetaFn);
+        $this->ind->setVersioning(Indexer::VERSIONING_DIGEST, $verMetaFn, $verRefFn);
         $indRes2 = $this->ind->import();
         $this->noteResources($indRes2);
         self::$repo->commit();
@@ -519,8 +532,9 @@ class IndexerTest extends TestBase {
         $prevMeta  = $prevRes->getMetadata();
         $this->assertEquals($pid, (string) $prevMeta->getObject($pidTmpl)); // PID present in the old resource
         $this->assertTrue(in_array($pid, $prevRes->getIds()));
-
-        file_put_contents(__DIR__ . '/data/sample.xml', random_int(0, 123456));
+        $infoTmpl  = new PT(DF::namedNode('https://vocabs.acdh.oeaw.ac.at/schema#hasVersionInfo'));
+        $this->assertEquals("old resource info", $prevMeta->getObjectValue($infoTmpl));
+        $this->assertEquals("new resource info", $meta->getObjectValue($infoTmpl));
     }
 
     /**

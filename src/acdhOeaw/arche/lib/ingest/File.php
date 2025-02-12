@@ -65,6 +65,16 @@ class File {
      * @var callable $versioningMetaFunc
      */
     private $versioningMetaFunc;
+
+    /**
+     * A callable with signature
+     * `function(\acdhOeaw\arche\lib\RepoResource $old, \acdhOeaw\arche\lib\RepoResource $old $new): void
+     * fixing references to the old resource (or doing any other versioning-related
+     * metadata processing which requires the new version resource to be already created)
+     * 
+     * @var callable
+     */
+    private $versioningRefFunc;
     private ?string $meterId;
     private RepoResource $repoRes;
     private int $uploadsCount = 0;
@@ -85,6 +95,10 @@ class File {
      * @param callable $versioningMetaFunc a callable with signature
      *   `function(\rdfInterface\DatasetNodeInterface $resourceMeta): array{0: \rdfInterface\DatasetNodeInterface $oldVersionMeta, 1: \rdfInterface\DatasetNodeInterface $newVersionMeta}
      *   generating new and old version metadata based on the current version metadata
+     * @param callable $versioningRefFunc a callable with signature
+     *   `function(\acdhOeaw\arche\lib\RepoResource $old, \acdhOeaw\arche\lib\RepoResource $old $new): void
+     *   fixing references to the old resource (or doing any other versioning-related
+     *   metadata processing which requires the new version resource to be already created)
      * @param string|null $meterId
      * @return RepoResource | SkippedException
      */
@@ -92,8 +106,9 @@ class File {
                            int $skipMode = Indexer::SKIP_NONE,
                            int $versioning = Indexer::VERSIONING_NONE,
                            ?callable $versioningMetaFunc = null,
+                           ?callabel $versioningRefFunc = null,
                            ?string $meterId = null): RepoResource | SkippedException {
-        return $this->uploadAsync($sizeLimit, $skipMode, $versioning, $versioningMetaFunc, $meterId = null)->wait();
+        return $this->uploadAsync($sizeLimit, $skipMode, $versioning, $versioningMetaFunc, $versioningRefFunc, $meterId = null)->wait();
     }
 
     /**
@@ -109,6 +124,10 @@ class File {
      * @param callable $versioningMetaFunc a callable with signature
      *   `function(\rdfInterface\DatasetNodeInterface $resourceMeta, \acdhOeaw\arche\lib\Schema $repositoryMetaSchema): array{0: \rdfInterface\DatasetNodeInterface $oldVersionMeta, 1: \rdfInterface\DatasetNodeInterface $newVersionMeta}
      *   generating new and old version metadata based on the current version metadata
+     * @param callable $versioningRefFunc a callable with signature
+     *   `function(\acdhOeaw\arche\lib\RepoResource $old, \acdhOeaw\arche\lib\RepoResource $old $new): void
+     *   fixing references to the old resource (or doing any other versioning-related
+     *   metadata processing which requires the new version resource to be already created)
      * @param ?string $meterId identifier of the progress meter (if null, no
      *   progress information is displayed)
      * @return PromiseInterface
@@ -117,6 +136,7 @@ class File {
                                 int $skipMode = Indexer::SKIP_NONE,
                                 int $versioning = Indexer::VERSIONING_NONE,
                                 ?callable $versioningMetaFunc = null,
+                                ?callable $versioningRefFunc = null,
                                 ?string $meterId = null): PromiseInterface {
         $this->uploadsCount++;
         // to make it easy to populate the whole required context trough promises
@@ -130,6 +150,9 @@ class File {
         }
         if ($versioningMetaFunc !== null) {
             $this->versioningMetaFunc = $versioningMetaFunc;
+        }
+        if ($versioningRefFunc !== null) {
+            $this->versioningRefFunc = $versioningRefFunc;
         }
 
         $promise = $this->repo->getResourceByIdsAsync($this->getIds());
@@ -171,7 +194,8 @@ class File {
 
         // check if new version is needed
         $skipUpload = true;
-        $oldMeta    = $this->repoRes->getMetadata();
+        $oldRes     = $this->repoRes;
+        $oldMeta    = $oldRes->getGraph();
         switch ($this->versioning) {
             case Indexer::VERSIONING_DATE:
                 $modDate    = (string) $oldMeta->getObject($schema->modificationDate);
@@ -211,9 +235,19 @@ class File {
         $oldRepoRes->setMetadata($oldMeta);
         $promise    = $oldRepoRes->updateMetadataAsync(RepoResource::UPDATE_OVERWRITE, RepoResource::META_RESOURCE);
         if ($promise === null) {
-            return $this->createAsync();
+            $promise = $this->createAsync();
+        } else {
+            $promise = new RepoResourcePromise($promise->then(fn() => $this->createAsync()));
         }
-        return new RepoResourcePromise($promise->then(fn() => $this->createAsync()));
+        if (isset($this->versioningRefFunc)) {
+            $fn      = $this->versioningRefFunc;
+            $promise = new RepoResourcePromise($promise->then(function (RepoResource $newRes) use ($oldRes,
+                                                                                                   $fn) {
+                    $fn($oldRes, $newRes);
+                    return $newRes;
+                }));
+        }
+        return $promise;
     }
 
     private function updateAsync(bool $skipUpload = false): RepoResourcePromise | RepoResource {
