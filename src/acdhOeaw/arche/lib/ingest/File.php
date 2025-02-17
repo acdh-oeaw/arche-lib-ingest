@@ -224,8 +224,8 @@ class File {
         }
 
         // progress meter
-        $upload = $this->withinSizeLimit() ? '+ upload ' : '';
-        echo ProgressMeter::format($this->meterId, $this->n, "Processing " . $this->info->getPathname() . " ({n}/{t} {p}%): new version $upload " . $this->repoRes->getUri() . "\n");
+        $upload = $this->withinSizeLimit() ? '+ upload' : '';
+        echo ProgressMeter::format($this->meterId, $this->n, "Processing " . $this->info->getPathname() . " ({n}/{t} {p}%): new version $upload of " . $this->repoRes->getUri() . "\n");
 
         // create the new version
         list($oldMeta, $newMeta) = ($this->versioningMetaFunc)($oldMeta, $this->repo->getSchema());
@@ -241,8 +241,13 @@ class File {
         }
         if ($this->versioningRefFunc !== null) {
             $fn      = $this->versioningRefFunc;
+            $meterId = $this->meterId;
+            $n       = $this->n;
             $promise = new RepoResourcePromise($promise->then(function (RepoResource $newRes) use ($oldRes,
-                                                                                                   $fn) {
+                                                                                                   $fn,
+                                                                                                   $meterId,
+                                                                                                   $n) {
+                    echo ProgressMeter::format($meterId, $n, "           " . $this->info->getPathname() . " ({n}/{t} {p}%): created " . $newRes->getUri() . "\n");
                     $fn($oldRes, $newRes);
                     return $newRes;
                 }));
