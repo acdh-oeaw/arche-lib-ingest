@@ -296,7 +296,6 @@ class Indexer {
      *   - Indexer::SKIP_BINARY_EXIST - skip ingestion of all resources which
      *     already exist and either already have binary payload or are metadata
      *     only resources.
-     * @param bool 
      * @return Indexer
      */
     public function setSkip(int $skipMode): Indexer {
