@@ -117,7 +117,7 @@ class File {
      * @param int $sizeLimit
      * @param int $skipMode skip rules based on existence of corresponding
      *   repository resource. One of Indexer::SKIP_NONE, Indexer::SKIP_EXIST,
-     *   Indexer::SKIP_BINARY_EXIST, Indexer::SKIP_NOT_EXIST
+     *   Indexer::SKIP_BINARY_EXIST, Indexer::SKIP_NOT_EXIST, Indexer::SKIP_SPECIAL
      * @param int $versioning versioning mode - one of Indexer::VERSIONING_NONE,
      *   Indexer::VERSIONING_DATE, Indexer::VERSIONING_DIGEST, 
      *   Indexer::VERSIONING_ALWAYS

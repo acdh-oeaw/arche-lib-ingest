@@ -62,6 +62,7 @@ class Indexer {
     const SKIP_NOT_EXIST     = 1;
     const SKIP_EXIST         = 2;
     const SKIP_BINARY_EXIST  = 4;
+    const SKIP_SPECIAL       = 8;
     const VERSIONING_NONE    = 1;
     const VERSIONING_ALWAYS  = 2;
     const VERSIONING_DIGEST  = 3;
@@ -71,6 +72,7 @@ class Indexer {
     const ERRMODE_INCLUDE    = 'include';
     const ERRMODE_CONTINUE   = 'continue';
     const NETWORKERROR_SLEEP = 3;
+    const SKIP_SPECIAL_REGEX = '/^[.]|^Thumbs.db$/';
 
     /**
      * Turns debug messages on
@@ -284,7 +286,9 @@ class Indexer {
      * their (not)existance in the repository.
      * 
      * @param int $skipMode mode. Any combination of (with a binary union or sum):
-     *   - Indexer::SKIP_NONE (default) - import all resources, 
+     *   - Indexer::SKIP_SPECIAL (default) - skip files with name starting with 
+     *     a dot and Thumbs.db files
+     *   - Indexer::SKIP_NONE - import all resources, 
      *   - Indexer::SKIP_NOT_EXIST - skip ingestion of all resources which don't
      *     exist at the beginning of the ingestion.
      *   - Indexer::SKIP_EXIST - skip ingestion of all resources which exist
@@ -292,6 +296,7 @@ class Indexer {
      *   - Indexer::SKIP_BINARY_EXIST - skip ingestion of all resources which
      *     already exist and either already have binary payload or are metadata
      *     only resources.
+     * @param bool 
      * @return Indexer
      */
     public function setSkip(int $skipMode): Indexer {
@@ -561,7 +566,8 @@ class Indexer {
             if ($file->isFile()) {
                 $filterMatch = empty($this->filter) || preg_match($this->filter, $file->getFilename());
                 $filterSkip  = empty($this->filterNot) || !preg_match($this->filterNot, $file->getFilename());
-                if ($filterMatch && $filterSkip) {
+                $specialSkip = ($this->skipMode & self::SKIP_SPECIAL) && preg_match(self::SKIP_SPECIAL_REGEX, $file->getFilename());
+                if ($filterMatch && $filterSkip && !$specialSkip) {
                     try {
                         $files[] = $this->createFile($file->getFileInfo());
                     } catch (MetaLookupException) {
