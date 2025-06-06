@@ -479,10 +479,6 @@ class Indexer {
      */
     public function import(string $errorMode = self::ERRMODE_FAIL,
                            int $concurrency = 3, int $retries = 6): array {
-        if (!isset($this->repo)) {
-            throw new IndexerException("Repository connection object isn't set. Call setRepo() or setParent() first or pass the Repo object to the constructor.");
-        }
-
         if ($this->flatStructure && substr($this->idPrefix, -1) !== '/') {
             $this->idPrefix .= '/';
         }

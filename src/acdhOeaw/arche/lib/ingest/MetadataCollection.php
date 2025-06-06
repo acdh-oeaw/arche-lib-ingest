@@ -265,6 +265,7 @@ class MetadataCollection extends Dataset {
                                                                        &$reingestions) {
             $Gn++;
             $uri      = (string) $sbj;
+            /** @phpstan-ignore isset.offset */
             $progress = "($Gn/$GN)" . (isset($reingestions[$uri]) ? " - $reingestions[$uri] reattempt" : '');
             echo self::$debug ? "Importing $uri $progress\n" : "";
             $meta     = $this->sanitizeResource($sbj);
