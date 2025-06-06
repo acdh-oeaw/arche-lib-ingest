@@ -28,7 +28,7 @@ namespace acdhOeaw\arche\lib\ingest;
 
 use BadMethodCallException;
 use RuntimeException;
-use GuzzleHttp\Client;
+use zozlak\ProxyClient;
 use GuzzleHttp\Exception\ClientException;
 use GuzzleHttp\Psr7\Request;
 use GuzzleHttp\Promise\RejectedPromise;
@@ -108,7 +108,7 @@ class SkosVocabulary extends MetadataCollection {
 
     static public function fromUrl(Repo $repo, string $url): self {
         $tmpFile = (string) tempnam(sys_get_temp_dir(), 'skosvocab');
-        $client  = new Client();
+        $client  = ProxyClient::factory();
         $headers = ['Accept' => 'text/turtle;q=1, application/rdf+xml;q=0.8, application/n-triples;q=0.6, application/ld+json;q=0.4'];
         $resp    = $client->send(new Request('get', $url, $headers));
         $format  = $resp->getHeader('Content-Type')[0] ?? '';
