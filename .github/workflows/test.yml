@@ -22,12 +22,13 @@ jobs:
         git clone --depth 1 --branch arche https://github.com/acdh-oeaw/arche-docker-config.git config
         chmod -x config/run.d/*sh
         chmod +x config/run.d/*xdebug.sh config/run.d/*postgresql.sh config/run.d/*config-yaml.sh config/run.d/*-bots.sh
+        cp .github/workflows/test-postgresql_config.sh config/run.d/99-postgresql.sh
         cp tests/config.yaml config/yaml/local.yaml
         cp .github/workflows/30-fixVocabularies.sh config/initScripts/
     - name: run repo docker
       run: |
         mkdir log
-        docker run --name arche -p 80:80 -v `pwd`/log:/home/www-data/log -v `pwd`/config:/home/www-data/config -e USER_UID=`id -u` -e USER_GID=`id -g` -d acdhch/arche
+        docker run --name arche -p 80:80 -p 5432:5432 -v `pwd`/log:/home/www-data/log -v `pwd`/config:/home/www-data/config -e USER_UID=`id -u` -e USER_GID=`id -g` -d acdhch/arche
     - name: composer update
       run: |
         composer update

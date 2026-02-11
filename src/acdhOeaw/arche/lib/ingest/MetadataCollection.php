@@ -29,6 +29,7 @@ namespace acdhOeaw\arche\lib\ingest;
 use Throwable;
 use SplObjectStorage;
 use InvalidArgumentException;
+use Composer\Semver\Comparator;
 use GuzzleHttp\Promise\RejectedPromise;
 use GuzzleHttp\Exception\ClientException;
 use GuzzleHttp\Exception\ConnectException;
@@ -48,6 +49,7 @@ use acdhOeaw\arche\lib\RepoResource;
 use acdhOeaw\arche\lib\Schema;
 use acdhOeaw\arche\lib\exception\Conflict;
 use acdhOeaw\arche\lib\exception\NotFound;
+use acdhOeaw\arche\lib\exception\TooManyRequests;
 use acdhOeaw\UriNormalizer;
 
 /**
@@ -62,8 +64,8 @@ class MetadataCollection extends Dataset {
     const ERRMODE_FAIL                   = 'fail';
     const ERRMODE_PASS                   = 'pass';
     const ERRMODE_INCLUDE                = 'include';
-    const NETWORKERROR_SLEEP             = 3;
-    const ALLOWED_CONFLICT_REASONS_REGEX = '/Resource [0-9]+ locked|Transaction [0-9]+ locked|Owned by other request|Lock not available|duplicate key value|deadlock detected/';
+    const SLEEP_RETRY                    = 3;
+    const ALLOWED_CONFLICT_REASONS_REGEX = '/Resource [0-9]+ locked|Transaction [0-9]+ locked|Owned by other request|Lock not available|duplicate key value|deadlock detected|Duplicated resource identifier/';
 
     /**
      * Turns debug messages on.
@@ -117,6 +119,10 @@ class MetadataCollection extends Dataset {
      */
     public function __construct(Repo $repo, mixed $input, ?string $format = null) {
         parent::__construct();
+
+        if (Comparator::lessThan($repo->getVersion(), '5.10')) {
+            throw new IndexerException("Incompatible ARCHE version " . $repo->getVersion() . " < 5.10");
+        }
 
         if ($input !== null) {
             $this->add(RdfUtil::parse($input, new DF(), $format));
@@ -254,14 +260,12 @@ class MetadataCollection extends Dataset {
         //     - if it's something other than primary key violation, return a RejectedPromise
         //       (which will be handled accordingly to the $mapErrorMode
         //     - it it's primary key violation such a resource exists already so:
-        //       - [promise2] find it
-        //         - [promise3] update its metadata
+        //       - [promise2] get its URI from the Conflict exception and update its metadata
         $GN           = count($toBeImported);
         $Gn           = 0;
         $reingestions = [];
         $f            = function (TermInterface $sbj, Repo $repo) use (&$Gn,
                                                                        $GN,
-                                                                       $idProp,
                                                                        &$reingestions) {
             $Gn++;
             $uri      = (string) $sbj;
@@ -277,21 +281,16 @@ class MetadataCollection extends Dataset {
                 }
             );
             $promise1 = $promise1->otherwise(
-                function ($reason) use ($meta, $idProp, $progress) {
+                function ($reason) use ($meta, $progress) {
                     if (!($reason instanceof Conflict)) {
                         return new RejectedPromise($reason);
                     }
-                    $ids      = $meta->listObjects(new PT($idProp))->getValues();
-                    $promise2 = $this->repo->getResourceByIdsAsync($ids);
-                    $promise2 = $promise2->then(
-                        function (RepoResource $repoRes) use ($meta, $progress) {
-                            echo self::$debug ? "\tupdating " . $repoRes->getUri() . " $progress\n" : "";
-                            $repoRes->setMetadata($meta);
-                            $promise3 = $repoRes->updateMetadataAsync();
-                            return $promise3 === null ? $repoRes : $promise3->then(fn() => $repoRes);
-                        }
-                    );
-                    return $promise2;
+                    $resUri   = $reason->getExistingUri();
+                    $repoRes  = new RepoResource($resUri, $this->repo);
+                    echo self::$debug ? "\tupdating " . $resUri . " $progress\n" : "";
+                    $repoRes->setMetadata($meta);
+                    $promise2 = $repoRes->updateMetadataAsync();
+                    return $promise2 === null ? $repoRes : $promise2->then(fn() => $repoRes);
                 }
             );
             return $promise1;
@@ -311,21 +310,26 @@ class MetadataCollection extends Dataset {
             $chunk        = array_slice($toBeImported, $i, $chunkSize);
             $chunkSize    = min($chunkSize, count($chunk)); // not to loose repeating reinjections
             $chunkRepoRes = $this->repo->map($chunk, $f, $concurrency, Repo::REJECT_INCLUDE);
-            $sleep        = false;
+            $sleep        = 0;
             foreach ($chunkRepoRes as $n => $j) {
                 // handle reingestion on "HTTP 409 Conflict"
                 $conflict     = $j instanceof Conflict && preg_match(self::ALLOWED_CONFLICT_REASONS_REGEX, $j->getMessage());
                 $notFound     = $j instanceof NotFound;
                 $networkError = $j instanceof ConnectException;
-                if ($conflict || $notFound || $networkError) {
+                $http429      = $j instanceof TooManyRequests;
+                $retry        = $conflict || $notFound || $networkError || $http429;
+                if ($retry) {
                     $metaRes            = $chunk[$n];
                     $uri                = (string) $metaRes;
                     $reingestions[$uri] = ($reingestions[$uri] ?? 0) + 1;
                     if ($reingestions[(string) $metaRes] <= $retries) {
                         $toBeImported[] = $metaRes;
-                        $sleep          = $sleep || $networkError;
+                        $sleep          = max($sleep, $networkError || $http429 ? self::SLEEP_RETRY : 0);
+                    } else {
+                        $retry = false;
                     }
-                } else {
+                }
+                if (!$retry) {
                     // non-retryable errors
                     if ($j instanceof Throwable && $errorMode === self::ERRMODE_FAIL) {
                         throw new IndexerException("Error during import", IndexerException::ERROR_DURING_IMPORT, $j, $commitedRepoRes);
@@ -344,10 +348,10 @@ class MetadataCollection extends Dataset {
                     }
                 }
             }
-            if ($sleep) {
-                sleep(self::NETWORKERROR_SLEEP);
+            if ($sleep > 0) {
+                sleep($sleep);
             }
-            if ($concurrency > 2) {
+            if ($concurrency >= 2) {
                 // if another attempt is needed, gradually reduce the concurrency
                 $concurrency = $concurrency >> 1;
             }

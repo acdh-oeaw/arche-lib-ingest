@@ -43,6 +43,7 @@ use acdhOeaw\arche\lib\Repo;
 use acdhOeaw\arche\lib\RepoResource;
 use acdhOeaw\arche\lib\Schema;
 use acdhOeaw\arche\lib\exception\Conflict;
+use acdhOeaw\arche\lib\exception\TooManyRequests;
 use acdhOeaw\arche\lib\ingest\util\FileId;
 use acdhOeaw\arche\lib\ingest\util\ProgressMeter;
 use acdhOeaw\arche\lib\ingest\metaLookup\MetaLookupConstant;
@@ -71,7 +72,7 @@ class Indexer {
     const ERRMODE_PASS       = 'pass';
     const ERRMODE_INCLUDE    = 'include';
     const ERRMODE_CONTINUE   = 'continue';
-    const NETWORKERROR_SLEEP = 3;
+    const SLEEP_RETRY        = 3;
     const SKIP_SPECIAL_REGEX = '/^[.]|^Thumbs.db$/';
 
     /**
@@ -507,7 +508,7 @@ class Indexer {
             $chunk        = array_slice($filesToImport, $i, $chunkSize);
             $chunkSize    = min($chunkSize, count($chunk)); // not to loose repeating reinjections
             $chunkRepoRes = $this->repo->map($chunk, $f, $concurrency, Repo::REJECT_INCLUDE);
-            $sleep        = false;
+            $sleep        = 0;
             foreach ($chunkRepoRes as $n => $j) {
                 if ($j instanceof SkippedException) {
                     continue;
@@ -515,11 +516,12 @@ class Indexer {
                 // handle reingestion on "HTTP 409 Conflict"
                 $isConflict     = $j instanceof Conflict && preg_match(MetadataCollection::ALLOWED_CONFLICT_REASONS_REGEX, $j->getMessage());
                 $isNetworkError = $j instanceof ConnectException;
-                if (($isConflict || $isNetworkError) && $chunk[$n]->getUploadsCount() <= $retries + 1) {
+                $isHttp429      = $j instanceof TooManyRequests;
+                if (($isConflict || $isNetworkError || $isHttp429) && $chunk[$n]->getUploadsCount() <= $retries) {
                     $filesToImport[] = $chunk[$n];
-                    $sleep           = $sleep || $isNetworkError;
+                    $sleep           = max($sleep, $isNetworkError || $isHttp429 ? self::SLEEP_RETRY : 0);
                 } else {
-                    // non-retryable errors
+                    // non-retryable errors or retries count reached
                     if ($j instanceof Throwable && $errorMode === self::ERRMODE_FAIL) {
                         throw new IndexerException("Error during import", IndexerException::ERROR_DURING_IMPORT, $j, $commitedRepoRes);
                     } elseif ($j instanceof Throwable) {
@@ -533,10 +535,10 @@ class Indexer {
                     }
                 }
             }
-            if ($sleep) {
-                sleep(self::NETWORKERROR_SLEEP);
+            if ($sleep > 0) {
+                sleep($sleep);
             }
-            if ($concurrency > 2) {
+            if ($concurrency >= 2) {
                 // if another attempt is needed, gradually reduce the concurrency
                 $concurrency = $concurrency >> 1;
             }

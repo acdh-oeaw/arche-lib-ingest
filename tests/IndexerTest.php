@@ -43,6 +43,7 @@ use acdhOeaw\arche\lib\RepoResource;
 use acdhOeaw\arche\lib\Schema;
 use acdhOeaw\arche\lib\exception\NotFound;
 use acdhOeaw\arche\lib\exception\Conflict;
+use acdhOeaw\arche\lib\exception\TooManyRequests;
 use acdhOeaw\arche\lib\ingest\Indexer;
 use acdhOeaw\arche\lib\ingest\IndexerException;
 use acdhOeaw\arche\lib\ingest\metaLookup\MetaLookupFile;
@@ -71,7 +72,9 @@ class IndexerTest extends TestBase {
         self::$repo->begin();
         $id = DF::namedNode('http://my.test/id');
         try {
-            self::$res = self::$repo->getResourceById($id);
+            /** @var RepoResource $res */
+            $res       = self::$repo->getResourceById($id);
+            self::$res = $res;
         } catch (NotFound $ex) {
             $meta      = new DatasetNode($id);
             $meta->add([
@@ -428,6 +431,7 @@ class IndexerTest extends TestBase {
         try {
             $indRes = $this->ind->import(Indexer::ERRMODE_FAIL, 10, 0);
             $this->noteResources($indRes);
+            /** @phpstan-ignore method.impossibleType */
             $this->assertTrue(false);
         } catch (IndexerException $e) {
             $this->assertInstanceOf(Conflict::class, $e->getPrevious());
@@ -497,7 +501,7 @@ class IndexerTest extends TestBase {
         $schema  = self::$repo->getSchema();
         $pidProp = $schema->ingest->pid;
         $pidTmpl = new PT($pidProp);
-        $pid     = DF::namedNode('https://sample.pid/' . rand());
+        $pid     = 'https://sample.pid/' . rand();
 
         $indRes1 = $indRes2 = $indRes3 = [];
         $this->ind->setFilter('/^sample.xml$/', Indexer::FILTER_MATCH);
@@ -508,7 +512,7 @@ class IndexerTest extends TestBase {
         $this->noteResources($indRes1);
         $initRes = array_pop($indRes1);
         $meta    = $initRes->getMetadata();
-        $meta->add(DF::quadNoSubject($pidProp, $pid));
+        $meta->add(DF::quadNoSubject($pidProp, DF::namedNode($pid)));
         $initRes->setMetadata($meta);
         $initRes->updateMetadata();
         self::$repo->commit();
@@ -517,7 +521,7 @@ class IndexerTest extends TestBase {
 
         self::$repo->begin();
         $this->ind->setVersioning(Indexer::VERSIONING_DIGEST, $verMetaFn, $verRefFn);
-        $indRes2 = $this->ind->import();
+        $indRes2 = $this->ind->import(retries: 0);
         $this->noteResources($indRes2);
         self::$repo->commit();
 
@@ -535,6 +539,7 @@ class IndexerTest extends TestBase {
         $infoTmpl  = new PT(DF::namedNode('https://vocabs.acdh.oeaw.ac.at/schema#hasVersionInfo'));
         $this->assertEquals("old resource info", $prevMeta->getObjectValue($infoTmpl));
         $this->assertEquals("new resource info", $meta->getObjectValue($infoTmpl));
+        $this->assertTrue($prevMeta->none(new PT($schema->parent)));
     }
 
     /**
@@ -555,6 +560,7 @@ class IndexerTest extends TestBase {
         // ERRMODE_FAIL
         try {
             $this->ind->import(Indexer::ERRMODE_FAIL);
+            /** @phpstan-ignore method.impossibleType */
             $this->assertTrue(false);
         } catch (IndexerException $e) {
             $this->assertStringContainsString('Wrong property value', $e->getPrevious()->getMessage());
@@ -601,6 +607,7 @@ class IndexerTest extends TestBase {
     /**
      * 
      * @large
+     * @group largeIndexer
      */
     public function testBigFile(): void {
         self::$test = 'testBigFile';
@@ -627,5 +634,38 @@ class IndexerTest extends TestBase {
         $this->assertEquals(1, count($indRes));
         $binSize = array_pop($indRes)->getMetadata()->getObject(new PT(self::$repo->getSchema()->binarySize));
         $this->assertEquals($count * $bufLen, (int) $binSize->getValue());
+    }
+
+    /**
+     * Covers two things:
+     * 
+     * - a retry-able error should be converted into a hard one when we run out of retries limit
+     * - retry on HTTP 429 should gradually reduce concurrency making the upload
+     *   eventually work
+     * 
+     * @large
+     * @group largeIndexer
+     */
+    public function testHttp429(): void {
+        self::$test = 'testHttp429';
+        
+        $this->ind->setFilter('/txt|xml/', Indexer::FILTER_MATCH);
+        $this->ind->setFilter('/^(skiptest.txt)$/', Indexer::FILTER_SKIP);
+        self::$repo->begin();
+        $conn = $this->saturateDbConnections(5);
+        try {
+            $this->ind->import(Indexer::ERRMODE_FAIL, concurrency: 4, retries: 0);
+            /** @phpstan-ignore method.impossibleType */
+            $this->assertTrue(false);
+        } catch (IndexerException $e) {
+            $this->assertInstanceOf(TooManyRequests::class, $e->getPrevious());
+        }
+
+        $indRes = $this->ind->import(Indexer::ERRMODE_FAIL, concurrency: 4, retries: 2);
+        $this->noteResources($indRes);
+        $this->assertEquals(6, count($indRes));
+        
+        unset($conn);
+        self::$repo->rollback();
     }
 }

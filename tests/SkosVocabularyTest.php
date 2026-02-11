@@ -33,6 +33,8 @@ use termTemplates\PredicateTemplate as PT;
 use termTemplates\QuadTemplate as QT;
 use termTemplates\NotTemplate;
 use termTemplates\NamedNodeTemplate;
+use acdhOeaw\arche\lib\RepoResource;
+use acdhOeaw\arche\lib\SearchConfig;
 use acdhOeaw\arche\lib\exception\NotFound;
 use acdhOeaw\arche\lib\ingest\SkosVocabulary;
 use zozlak\RdfConstants as RDF;
@@ -100,8 +102,10 @@ class SkosVocabularyTest extends TestBase {
 
         try {
             self::$repo->getResourceById('https://foo/scheme/9');
+            /** @phpstan-ignore method.impossibleType */
             $this->assertTrue(false, "https://foo/scheme/9 hasn't been removed");
         } catch (NotFound $ex) {
+            /** @phpstan-ignore method.alreadyNarrowedType */
             $this->assertTrue(true);
         }
     }
@@ -121,7 +125,13 @@ class SkosVocabularyTest extends TestBase {
         self::$repo->begin();
         $imported = $vocab->import();
         self::$repo->commit();
+        
         $this->noteResources($imported);
+        // find and mark for removal implicitly created resources
+        $query    = "SELECT id FROM identifiers WHERE ids LIKE 'https://bar/scheme%'";
+        $otherRes = self::$repo->getResourcesBySqlQuery($query, [], new SearchConfig());
+        $this->noteResources(iterator_to_array($otherRes));
+        
         $this->assertCount(7, $imported);
     }
 
@@ -136,6 +146,7 @@ class SkosVocabularyTest extends TestBase {
         $idProp     = $schema->label;
         $parentProp = $schema->parent;
 
+        /** @var SkosVocabulary $vocab */
         $vocab    = (new SkosVocabulary(self::$repo, __DIR__ . '/data/skosVocabulary.ttl'))
             ->setExactMatchMode(SkosVocabulary::EXACTMATCH_DROP, SkosVocabulary::EXACTMATCH_DROP)
             ->setSkosRelationsMode(SkosVocabulary::RELATIONS_DROP, SkosVocabulary::RELATIONS_DROP)
@@ -178,7 +189,7 @@ class SkosVocabularyTest extends TestBase {
      * @group SkosVocabulary
      */
     public function testSkosAsLiteral(): void {
-        $objTmpl = new NamedNodeTemplate(null, NamedNodeTemplate::ANY);
+        $objTmpl  = new NamedNodeTemplate(null, NamedNodeTemplate::ANY);
         $vocab    = (new SkosVocabulary(self::$repo, __DIR__ . '/data/skosVocabulary.ttl'))
             ->setExactMatchMode(SkosVocabulary::EXACTMATCH_LITERAL, SkosVocabulary::EXACTMATCH_DROP)
             ->setSkosRelationsMode(SkosVocabulary::RELATIONS_LITERAL, SkosVocabulary::RELATIONS_LITERAL);
@@ -207,6 +218,7 @@ class SkosVocabularyTest extends TestBase {
         file_put_contents($tmpFile, '<https://foo/bar> <https://bar/baz> "foo" .');
         try {
             new SkosVocabulary(self::$repo, $tmpFile, 'application/n-triples');
+            /** @phpstan-ignore method.impossibleType */
             $this->assertTrue(false, 'No error on no skos:ConceptSchema');
         } catch (Exception $ex) {
             $this->assertEquals('No skos:ConceptSchema found in the RDF graph', $ex->getMessage());
@@ -219,6 +231,7 @@ class SkosVocabularyTest extends TestBase {
         file_put_contents($tmpFile, $vocabulary);
         try {
             new SkosVocabulary(self::$repo, $tmpFile, 'application/n-triples');
+            /** @phpstan-ignore method.impossibleType */
             $this->assertTrue(false, 'No error on many skos:ConceptSchema');
         } catch (Exception $ex) {
             $this->assertEquals('Many skos:ConceptSchema found in the RDF graph', $ex->getMessage());
@@ -227,12 +240,14 @@ class SkosVocabularyTest extends TestBase {
         $vocab = new SkosVocabulary(self::$repo, __DIR__ . '/data/skosVocabulary.ttl');
         try {
             $vocab->setExactMatchMode('foo', 'bar');
+            /** @phpstan-ignore method.impossibleType */
             $this->assertTrue(false, 'Wrong exact match mode accepted');
         } catch (Exception $ex) {
             $this->assertEquals('Wrong inVocabulary or notInVocabulary parameter value', $ex->getMessage());
         }
         try {
             $vocab->setSkosRelationsMode('foo', 'bar');
+            /** @phpstan-ignore method.impossibleType */
             $this->assertTrue(false, 'Wrong skos relations mode accepted');
         } catch (Exception $ex) {
             $this->assertEquals('Wrong inVocabulary or notInVocabulary parameter value', $ex->getMessage());

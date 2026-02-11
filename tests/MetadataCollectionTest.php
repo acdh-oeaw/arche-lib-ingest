@@ -32,6 +32,7 @@ use quickRdf\DatasetNode;
 use termTemplates\PredicateTemplate as PT;
 use acdhOeaw\arche\lib\RepoResource;
 use acdhOeaw\arche\lib\exception\NotFound;
+use acdhOeaw\arche\lib\exception\TooManyRequests;
 use acdhOeaw\arche\lib\ingest\IndexerException;
 use acdhOeaw\arche\lib\ingest\MetadataCollection;
 
@@ -170,9 +171,9 @@ class MetadataCollectionTest extends TestBase {
         $this->assertEquals(14, count($indRes));
         $acdh     = self::$repo->getResourceById('http://viaf.org/viaf/6515148451584915970000');
         $acdhMeta = $acdh->getMetadata();
-        $tmpl = new PT(DF::namedNode('https://vocabs.acdh.oeaw.ac.at/schema#hasPostcode'));
+        $tmpl     = new PT(DF::namedNode('https://vocabs.acdh.oeaw.ac.at/schema#hasPostcode'));
         $this->assertEquals(1010, (int) $acdhMeta->getObject($tmpl)->getValue());
-        $tmpl = new PT(DF::namedNode('https://vocabs.acdh.oeaw.ac.at/schema#hasTitle'));
+        $tmpl     = new PT(DF::namedNode('https://vocabs.acdh.oeaw.ac.at/schema#hasTitle'));
         $this->assertEquals('Austrian Centre for Digital Humanities and Cultural Heritage', (string) $acdhMeta->getObject($tmpl));
 
         // repeat to make sure there are no issues with resource duplication, etc.
@@ -224,8 +225,10 @@ class MetadataCollectionTest extends TestBase {
         foreach ($graph->listSubjects() as $res) {
             try {
                 self::$repo->getResourceById((string) $res);
+                /** @phpstan-ignore method.impossibleType */
                 $this->assertTrue(false, "Autocommit happened");
             } catch (NotFound) {
+                /** @phpstan-ignore method.alreadyNarrowedType */
                 $this->assertTrue(true);
             }
         }
@@ -305,6 +308,7 @@ class MetadataCollectionTest extends TestBase {
         self::$repo->begin();
         try {
             $indRes = $graph->import('https://id.acdh.oeaw.ac.at/', MetadataCollection::SKIP, MetadataCollection::ERRMODE_PASS);
+            /** @phpstan-ignore method.impossibleType */
             $this->assertTrue(false);
         } catch (IndexerException $e) {
             $this->assertStringStartsWith('There was at least one error during the import', $e->getMessage());
@@ -312,8 +316,10 @@ class MetadataCollectionTest extends TestBase {
         $this->assertInstanceOf(RepoResource::class, self::$repo->getResourceById('https://id.acdh.oeaw.ac.at/id1'));
         try {
             self::$repo->getResourceById('https://id.acdh.oeaw.ac.at/id2');
+            /** @phpstan-ignore method.impossibleType */
             $this->assertTrue(false);
         } catch (NotFound $e) {
+            /** @phpstan-ignore method.alreadyNarrowedType */
             $this->assertTrue(true);
         }
         self::$repo->rollback();
@@ -323,6 +329,7 @@ class MetadataCollectionTest extends TestBase {
         self::$repo->begin();
         try {
             $indRes = $graph->import('https://id.acdh.oeaw.ac.at/', MetadataCollection::SKIP, MetadataCollection::ERRMODE_FAIL);
+            /** @phpstan-ignore method.impossibleType */
             $this->assertTrue(false);
         } catch (IndexerException $e) {
             $this->assertInstanceOf(ClientException::class, $e->getPrevious());
@@ -331,10 +338,42 @@ class MetadataCollectionTest extends TestBase {
         // can't test for resource one as ingestion order is unknown
         try {
             self::$repo->getResourceById('https://id.acdh.oeaw.ac.at/id2');
+            /** @phpstan-ignore method.impossibleType */
             $this->assertTrue(false);
         } catch (NotFound $e) {
+            /** @phpstan-ignore method.alreadyNarrowedType */
             $this->assertTrue(true);
         }
+        self::$repo->rollback();
+    }
+
+    /**
+     * Covers two things:
+     * 
+     * - a retry-able error should be converted into a hard one when we run out of retries limit
+     * - retry on HTTP 429 should gradually reduce concurrency making the upload
+     *   eventually work
+     * 
+     * @group metadataCollection
+     */
+    public function testHttp429(): void {
+        self::$test = 'testHttp429';
+        $graph      = new MetadataCollection(self::$repo, __DIR__ . '/data/graph-small.ttl');
+
+        self::$repo->begin();
+        $conn = $this->saturateDbConnections(6);
+        try {
+            $graph->import('https://id.acdh.oeaw.ac.at/', MetadataCollection::SKIP, concurrency: 4, retries: 0);
+            /** @phpstan-ignore method.impossibleType */
+            $this->assertTrue(false);
+        } catch (IndexerException $e) {
+            $this->assertInstanceOf(TooManyRequests::class, $e->getPrevious());
+        }
+
+        $indRes = $graph->import('https://id.acdh.oeaw.ac.at/', MetadataCollection::SKIP, concurrency: 4, retries: 2);
+        $this->assertEquals(2, count($indRes));
+
+        unset($conn);
         self::$repo->rollback();
     }
 }
