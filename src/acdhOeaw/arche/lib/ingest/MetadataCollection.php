@@ -286,6 +286,8 @@ class MetadataCollection extends Dataset {
                         return new RejectedPromise($reason);
                     }
                     $resUri   = $reason->getExistingUri();
+if(empty($resUri)) throw new \Exception("EMPTY RES URI");
+if(empty($resUri)) echo "\n##############################\n";
                     $repoRes  = new RepoResource($resUri, $this->repo);
                     echo self::$debug ? "\tupdating " . $resUri . " $progress\n" : "";
                     $repoRes->setMetadata($meta);
@@ -390,7 +392,7 @@ class MetadataCollection extends Dataset {
                 $nonIdCond = !$idProp->equals($quad->getPredicate());
                 $nmspCond  = str_starts_with((string) $quad->getObject(), $namespace);
                 if ($nonIdCond || $nmspCond) {
-                    $validTmp->attach($sbj);
+                    $validTmp->offsetSet($sbj);
                 }
 
                 $t1 = time();
