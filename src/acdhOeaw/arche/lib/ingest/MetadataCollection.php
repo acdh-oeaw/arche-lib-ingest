@@ -286,8 +286,6 @@ class MetadataCollection extends Dataset {
                         return new RejectedPromise($reason);
                     }
                     $resUri   = $reason->getExistingUri();
-if(empty($resUri)) throw new \Exception("EMPTY RES URI");
-if(empty($resUri)) echo "\n##############################\n";
                     $repoRes  = new RepoResource($resUri, $this->repo);
                     echo self::$debug ? "\tupdating " . $resUri . " $progress\n" : "";
                     $repoRes->setMetadata($meta);
