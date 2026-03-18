@@ -37,7 +37,7 @@ use GuzzleHttp\Exception\ConnectException;
 use rdfInterface\NamedNodeInterface;
 use quickRdf\DatasetNode;
 use quickRdf\DataFactory as DF;
-use acdhOeaw\UriNormalizer;
+use acdhOeaw\uriNormalizer\UriNormalizer;
 use acdhOeaw\arche\lib\BinaryPayload;
 use acdhOeaw\arche\lib\Repo;
 use acdhOeaw\arche\lib\RepoResource;

@@ -57,6 +57,7 @@ jobs:
         mkdir -p build/logs
         XDEBUG_MODE=coverage ./vendor/bin/phpunit --display-deprecations --display-phpunit-deprecations --display-notices --display-warnings
     - name: coveralls
+      if: ${{ matrix.php == 8.5 }}
       run: |
         export COVERALLS_RUN_LOCALLY=1
         export COVERALLS_REPO_TOKEN=${{ secrets.coverallsToken }}

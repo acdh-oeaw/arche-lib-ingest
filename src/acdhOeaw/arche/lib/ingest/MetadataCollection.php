@@ -50,7 +50,7 @@ use acdhOeaw\arche\lib\Schema;
 use acdhOeaw\arche\lib\exception\Conflict;
 use acdhOeaw\arche\lib\exception\NotFound;
 use acdhOeaw\arche\lib\exception\TooManyRequests;
-use acdhOeaw\UriNormalizer;
+use acdhOeaw\uriNormalizer\UriNormalizer;
 
 /**
  * Class for importing whole metadata graph into the repository.

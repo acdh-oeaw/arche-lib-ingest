@@ -15,7 +15,7 @@
         "ext-iconv": "*",
         "guzzlehttp/guzzle": "^7",
         "acdh-oeaw/arche-lib": "^7.6",
-        "acdh-oeaw/uri-normalizer": "^3",
+        "acdh-oeaw/uri-normalizer": "^4",
         "zozlak/rdf-constants": "^1.2.1",
         "kbsali/redmine-api": "^2.7",
         "zozlak/guzzle-proxy-client": "^1.1"
