@@ -26,7 +26,6 @@
 
 namespace acdhOeaw\arche\lib\ingest;
 
-use RuntimeException;
 use BadMethodCallException;
 use Throwable;
 use DirectoryIterator;
@@ -480,6 +479,7 @@ class Indexer {
      */
     public function import(string $errorMode = self::ERRMODE_FAIL,
                            int $concurrency = 3, int $retries = 6): array {
+        $concurrencyMax = $concurrency;
         if ($this->flatStructure && substr($this->idPrefix, -1) !== '/') {
             $this->idPrefix .= '/';
         }
@@ -537,10 +537,13 @@ class Indexer {
             }
             if ($sleep > 0) {
                 sleep($sleep);
-            }
-            if ($concurrency >= 2) {
-                // if another attempt is needed, gradually reduce the concurrency
-                $concurrency = $concurrency >> 1;
+                if ($concurrency >= 2) {
+                    // if sleep-causing errors occured, reduce the concurrency
+                    $concurrency = $concurrency >> 1;
+                }
+            } elseif ($concurrency < $concurrencyMax) {
+                // if everything went fine, increase concurrency
+                $concurrency++;
             }
         }
         if (!empty($errors) && $errorMode === self::ERRMODE_PASS) {

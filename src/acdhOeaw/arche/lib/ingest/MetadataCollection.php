@@ -237,7 +237,8 @@ class MetadataCollection extends Dataset {
     public function import(string $namespace, int $singleOutNmsp,
                            string $errorMode = self::ERRMODE_FAIL,
                            int $concurrency = 3, int $retries = 6): array {
-        $idProp = $this->schema->id;
+        $idProp         = $this->schema->id;
+        $concurrencyMax = $concurrency;
 
         $dict = [self::SKIP, self::CREATE];
         if (!in_array($singleOutNmsp, $dict)) {
@@ -350,10 +351,13 @@ class MetadataCollection extends Dataset {
             }
             if ($sleep > 0) {
                 sleep($sleep);
-            }
-            if ($concurrency >= 2) {
-                // if another attempt is needed, gradually reduce the concurrency
-                $concurrency = $concurrency >> 1;
+                if ($concurrency >= 2) {
+                    // if sleep-causing errors occured, reduce the concurrency
+                    $concurrency = $concurrency >> 1;
+                }
+            } elseif ($concurrency < $concurrencyMax) {
+                // if everything went fine, increase concurrency
+                $concurrency++;
             }
         }
         if (!empty($errors) && $errorMode === self::ERRMODE_PASS) {
