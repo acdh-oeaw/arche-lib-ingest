@@ -282,7 +282,7 @@ class MetadataCollection extends Dataset {
             );
             $promise1 = $promise1->otherwise(
                 function ($reason) use ($meta, $progress) {
-                    if (!($reason instanceof Conflict)) {
+                    if (!($reason instanceof Conflict) || empty($reason->getExistingUri())) {
                         return new RejectedPromise($reason);
                     }
                     $resUri   = $reason->getExistingUri();
