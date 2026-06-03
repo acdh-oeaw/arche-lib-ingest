@@ -135,7 +135,7 @@ class IndexerTest extends TestBase {
         foreach ($indRes as $i) {
             $file = (string) $i->getGraph()->getObject(new PT(self::$schema->fileName));
             if (is_file(__DIR__ . "/data/$file")) {
-                $resp = self::$repo->sendRequest(new Request('get', (string) $i->getUri()));
+                $resp = self::$repo->sendRequest(new Request('GET', (string) $i->getUri()));
                 $this->assertEquals(file_get_contents(__DIR__ . "/data/$file"), (string) $resp->getBody());
             }
         }
@@ -144,7 +144,7 @@ class IndexerTest extends TestBase {
         foreach ($indRes as $i) {
             $file = (string) $i->getGraph()->getObject(new PT(self::$schema->fileName));
             if (is_file(__DIR__ . "/data/$file")) {
-                $resp = self::$repo->sendRequest(new Request('get', (string) $i->getUri()));
+                $resp = self::$repo->sendRequest(new Request('GET', (string) $i->getUri()));
                 $this->assertEquals(file_get_contents(__DIR__ . "/data/$file"), (string) $resp->getBody());
             }
         }

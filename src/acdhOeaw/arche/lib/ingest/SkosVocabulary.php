@@ -110,7 +110,7 @@ class SkosVocabulary extends MetadataCollection {
         $tmpFile = (string) tempnam(sys_get_temp_dir(), 'skosvocab');
         $client  = ProxyClient::factory();
         $headers = ['Accept' => 'text/turtle;q=1, application/rdf+xml;q=0.8, application/n-triples;q=0.6, application/ld+json;q=0.4'];
-        $resp    = $client->send(new Request('get', $url, $headers));
+        $resp    = $client->send(new Request('GET', $url, $headers));
         $format  = $resp->getHeader('Content-Type')[0] ?? '';
         $format  = explode(';', $format)[0];
         file_put_contents($tmpFile, (string) $resp->getBody());
