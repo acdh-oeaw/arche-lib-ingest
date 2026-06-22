@@ -63,6 +63,7 @@ class Indexer {
     const SKIP_EXIST         = 2;
     const SKIP_BINARY_EXIST  = 4;
     const SKIP_SPECIAL       = 8;
+    const SKIP_DIRECTORY     = 16;
     const VERSIONING_NONE    = 1;
     const VERSIONING_ALWAYS  = 2;
     const VERSIONING_DIGEST  = 3;
@@ -564,10 +565,11 @@ class Indexer {
         $files = [];
         foreach ($iter as $n => $file) {
             if ($file->isFile()) {
-                $filterMatch = empty($this->filter) || preg_match($this->filter, $file->getFilename());
-                $filterSkip  = empty($this->filterNot) || !preg_match($this->filterNot, $file->getFilename());
-                $specialSkip = ($this->skipMode & self::SKIP_SPECIAL) && preg_match(self::SKIP_SPECIAL_REGEX, $file->getFilename());
-                if ($filterMatch && $filterSkip && !$specialSkip) {
+                $filterMatch   = empty($this->filter) || preg_match($this->filter, $file->getFilename());
+                $filterSkip    = empty($this->filterNot) || !preg_match($this->filterNot, $file->getFilename());
+                $specialSkip   = ($this->skipMode & self::SKIP_SPECIAL) && preg_match(self::SKIP_SPECIAL_REGEX, $file->getFilename());
+                $directorySkip = $this->skipMode & self::SKIP_DIRECTORY && $file->isDir();
+                if ($filterMatch && $filterSkip && !$specialSkip && !$directorySkip) {
                     try {
                         $files[] = $this->createFile($file->getFileInfo());
                     } catch (MetaLookupException) {
