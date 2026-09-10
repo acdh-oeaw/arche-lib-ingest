@@ -565,11 +565,10 @@ class Indexer {
         $files = [];
         foreach ($iter as $n => $file) {
             if ($file->isFile()) {
-                $filterMatch   = empty($this->filter) || preg_match($this->filter, $file->getFilename());
-                $filterSkip    = empty($this->filterNot) || !preg_match($this->filterNot, $file->getFilename());
-                $specialSkip   = ($this->skipMode & self::SKIP_SPECIAL) && preg_match(self::SKIP_SPECIAL_REGEX, $file->getFilename());
-                $directorySkip = $this->skipMode & self::SKIP_DIRECTORY && $file->isDir();
-                if ($filterMatch && $filterSkip && !$specialSkip && !$directorySkip) {
+                $filterMatch = empty($this->filter) || preg_match($this->filter, $file->getFilename());
+                $filterSkip  = empty($this->filterNot) || !preg_match($this->filterNot, $file->getFilename());
+                $specialSkip = ($this->skipMode & self::SKIP_SPECIAL) && preg_match(self::SKIP_SPECIAL_REGEX, $file->getFilename());
+                if ($filterMatch && $filterSkip && !$specialSkip) {
                     try {
                         $files[] = $this->createFile($file->getFileInfo());
                     } catch (MetaLookupException) {
@@ -586,10 +585,12 @@ class Indexer {
             }
         }
         if (!$this->flatStructure && $level > 0 && (($n ?? 0) > 0 || $this->includeEmpty)) {
-            try {
-                $files[] = $this->createFile($dir->getFileInfo());
-            } catch (MetaLookupException) {
-                
+            if (!($this->skipMode & self::SKIP_DIRECTORY)) {
+                try {
+                    $files[] = $this->createFile($dir->getFileInfo());
+                } catch (MetaLookupException) {
+                    
+                }
             }
         }
         return $files;
